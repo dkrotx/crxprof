@@ -3,6 +3,13 @@
 *.lo
 *.o
 
+# compiled result file
+crxprof
+
+# Vim editor
+*.swp
+*.bak
+
 # Compiled Dynamic libraries
 *.so
 *.dylib

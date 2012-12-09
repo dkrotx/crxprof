@@ -1,4 +1,4 @@
 crxprof
 =======
 
-crappy runtume profiler
+cripple runtume profiler

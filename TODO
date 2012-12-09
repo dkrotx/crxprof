@@ -1,26 +1,26 @@
-- move to libbfd
-
-- EINTR in wait(2)
+critical:
 - cont right from start (even if no CPU events). elsewere - starvation
-- adopting to /proc/pid/schedstat
-- reset errno for ptrace
+- adopting to /proc/pid/schedstat (nanosec/usec/msec)
 - fix REALTIME profile
-- show only nodes wich accounted
+
+critical for user-usage:
+- full usage
 
 
+- reset errno for ptrace
+- show unknown bts
+- comments in callgrind (usage, time spent, ...)
 - starting info (CPU% IO% wall_clock)
-- alloc for nodes
-- usage
-- help from shell-script
+- alloc for nodes (and no memleaking)
 - reset stat or not
-- cut names from libc-version
-- (optional) short names for symbols
 
-- build system (ability to point libunwind)
+- build system
 - man
-- executable-sh with static linkage
 - blog-record
 
-
+- (optional) short names for symbols
 - (optional) ability to account IOWAIT
-- strange things with syscalls accounting. Libc wrappers should be seen, but finish 
+
+discover:
+- EINTR in wait(2) [strange bug]
+- strange things with syscalls accounting. Libc wrappers should be seen

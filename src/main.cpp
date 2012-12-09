@@ -1,3 +1,8 @@
+/*
+ * main.cpp
+ *
+ * Entry point of crxprof. Parse arguments and collect symbols of given process (ID).
+ */
 #include <sys/types.h>
 #include <sys/time.h>
 #include <time.h>
@@ -15,8 +20,12 @@
 #include <string>
 #include <algorithm>
 
+/* work-around compilation error on redifinition basename() */
+#define HAVE_DECL_BASENAME 1
+
 #include "crxprof.hpp"
 #include "symbols.h"
+#include "demangle.h"
 
 struct timeval tv_last_sigint = {0, 0};
 bool sigint_caught = false;
@@ -24,7 +33,8 @@ bool sigint_caught_twice = false;
 
 static char *g_progname;
 
-void on_sigint(int)
+void
+on_sigint(int)
 {
     struct timeval tv, tv_diff;
     gettimeofday(&tv, NULL);
@@ -38,7 +48,8 @@ void on_sigint(int)
     tv_last_sigint = tv;
 }
 
-void on_sigalarm(int)
+void
+on_sigalarm(int)
 {
     /* nothing, just break sleep() */
 }
@@ -46,6 +57,7 @@ void on_sigalarm(int)
 
 static void dump_profile(const std::vector<fn_descr> &funcs, calltree_node *root, const char *filename);
 static void read_symbols(pid_t pid, std::vector<fn_descr> *funcs);
+static void print_symbols(const std::vector<fn_descr> &fns);
 static void usage();
 
 #define FREQ_2PERIOD_USEC(n) ( 1000000 / (n) )
@@ -57,14 +69,17 @@ struct program_params
     vproperties vprops;
     const char *dumpfile;
     crxprof_method prof_method;
+    bool just_print_symbols;
 
     program_params() : us_sleep(FREQ_2PERIOD_USEC(DEFAULT_FREQ)), 
-                       dumpfile(NULL), prof_method(PROF_CPUTIME) {}
+                       dumpfile(NULL), prof_method(PROF_CPUTIME),
+                       just_print_symbols(false) {}
 };
 
 static bool parse_args(program_params *params, int argc, char **argv);
 
-int main(int argc, char *argv[])
+int
+main(int argc, char *argv[])
 {
     std::vector<fn_descr> funcs;
     ptrace_context ptrace_ctx;
@@ -77,6 +92,10 @@ int main(int argc, char *argv[])
 
     print_message("Reading symbols (list of function)");
     read_symbols(params.pid, &funcs);
+    if (params.just_print_symbols) {
+        print_symbols(funcs);
+        exit(0);
+    }
 
     calltree_node *root = NULL;
 
@@ -132,12 +151,13 @@ parse_args(program_params *params, int argc, char **argv)
 {
     while(1) {
         int c;
-        enum { PRINT_FULL_STACK = 257 };
+        enum { PRINT_FULL_STACK = 256, JUST_PRINT_SYMBOLS };
 
         static struct option long_opts[] = {
             {"help",         no_argument,       0,  'h' },
             {"freq",         required_argument, 0,  'f' },
             {"full-stack",   no_argument,       0,   PRINT_FULL_STACK },
+            {"print-symbols", no_argument,      0,   JUST_PRINT_SYMBOLS },
             {"max-depth",    required_argument, 0,  'm' },
             {"realtime",     no_argument,       0,  'r' },
             {"min-cost",     required_argument, 0,  'c' },
@@ -169,6 +189,9 @@ parse_args(program_params *params, int argc, char **argv)
                 break;
             case PRINT_FULL_STACK:
                 params->vprops.print_fullstack = true;
+                break;
+            case JUST_PRINT_SYMBOLS:
+                params->just_print_symbols = true;
                 break;
             default:
                 usage();
@@ -238,7 +261,7 @@ read_symbols(pid_t pid, std::vector<fn_descr> *funcs)
                 if (es.symbol_class == 'T') {
                     fn_descr descr;
 
-                    descr.name = strdup(es.symbol_name);
+                    descr.name = strdup(cplus_demangle(es.symbol_name, AUTO_DEMANGLING) ?: es.symbol_name);
                     descr.addr = (long)es.symbol_value;
                     descr.len  = es.symbol_size;
 
@@ -263,7 +286,7 @@ read_symbols(pid_t pid, std::vector<fn_descr> *funcs)
                 {
                     fn_descr descr;
 
-                    descr.name = strdup(es.symbol_name);
+                    descr.name = strdup(cplus_demangle(es.symbol_name, AUTO_DEMANGLING) ?: es.symbol_name);
                     descr.addr = (long)((off_t)es.symbol_value - load_offset + (char *)minf->start_addr);
                     descr.len  = es.symbol_size;
 
@@ -282,12 +305,18 @@ read_symbols(pid_t pid, std::vector<fn_descr> *funcs)
     std::vector<fn_descr>::iterator it = std::unique(funcs->begin(), funcs->end(), fdescr_addr_cmp());
     funcs->erase(it, funcs->end());
 
-    /*for(std::vector<fn_descr>::iterator it = funcs->begin(); it != funcs->end(); it++) {
-        printf("%p\t%d\t%s\n", it->addr, it->len, it->name);
-    }*/
 }
 
-static void usage()
+static void
+print_symbols(const std::vector<fn_descr> &fns)
+{
+    for(std::vector<fn_descr>::const_iterator it = fns.begin(); it != fns.end(); ++it) {
+        printf("%p\t%d\t%s\n", (void *)it->addr, it->len, it->name);
+    }
+}
+
+static void 
+usage()
 {
     fprintf(stderr, "Usage: %s [-m|--max-depth N] [-h] pid\n", g_progname);
     fprintf(stderr, "\t-h|--help: show this help\n"
