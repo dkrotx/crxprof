@@ -1,0 +1,26 @@
+- move to libbfd
+
+- EINTR in wait(2)
+- cont right from start (even if no CPU events). elsewere - starvation
+- adopting to /proc/pid/schedstat
+- reset errno for ptrace
+- fix REALTIME profile
+- show only nodes wich accounted
+
+
+- starting info (CPU% IO% wall_clock)
+- alloc for nodes
+- usage
+- help from shell-script
+- reset stat or not
+- cut names from libc-version
+- (optional) short names for symbols
+
+- build system (ability to point libunwind)
+- man
+- executable-sh with static linkage
+- blog-record
+
+
+- (optional) ability to account IOWAIT
+- strange things with syscalls accounting. Libc wrappers should be seen, but finish 
