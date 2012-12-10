@@ -5,6 +5,7 @@ critical:
 
 critical for user-usage:
 - full usage
+- mode: ./crxprof [options] -- cmd ...
 
 
 - reset errno for ptrace

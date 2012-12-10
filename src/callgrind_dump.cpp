@@ -1,4 +1,6 @@
 /*
+ * callgrind_dumpc.pp
+ *
  *  Dump calltree in Callgrind format (http://valgrind.org/docs/manual/cl-format.html)
  */
 
@@ -16,7 +18,8 @@ struct call_summary {
   call_summary(const std::vector<fn_descr> &funcs) : first_fn_descr(&funcs[0]), total_cost(0U) {}
 };
 
-static void collect_summary_bynodes(calltree_node *node, call_summary &ctx) {
+static void
+collect_summary_bynodes(calltree_node *node, call_summary &ctx) {
   ctx.fn_ids.push_back(node->pfn - ctx.first_fn_descr);
   ctx.total_cost += node->nself;
   
@@ -24,7 +27,8 @@ static void collect_summary_bynodes(calltree_node *node, call_summary &ctx) {
     collect_summary_bynodes(*it, ctx); 
 }
 
-static void collect_summary(calltree_node *root, call_summary &summary)
+static void
+collect_summary(calltree_node *root, call_summary &summary)
 {
   collect_summary_bynodes(root, summary);
   
@@ -53,7 +57,8 @@ print_costs(const call_summary &summary, calltree_node *node, std::ostream &os)
 }
 
 
-void dump_callgrind(const std::vector<fn_descr> &funcs, calltree_node *root, std::ostream &os)
+void
+dump_callgrind(const std::vector<fn_descr> &funcs, calltree_node *root, std::ostream &os)
 { 
   call_summary summary(funcs);
   

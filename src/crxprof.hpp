@@ -38,7 +38,6 @@ struct ptrace_context {
     unw_addr_space_t addr_space;
     void *unwind_rctx;
     uint64_t saved_cputime;
-    bool stopped;
     char schedstat_path[sizeof("/proc/4000000000/schedstat")];
     char procstat_path[sizeof("/proc/4000000000/stat")];
 };

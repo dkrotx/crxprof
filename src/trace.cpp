@@ -78,7 +78,14 @@ void attach_process(pid_t pid, struct ptrace_context *ctx)
     if ( -1 == ptrace(PTRACE_ATTACH, pid, NULL, NULL) )
         err(1, "ptrace(PTRACE_ATTACH, %d) failed", pid);
 
-    ctx->stopped = true; // PTRACE_ATTACH stops process
+    /* Since ptrace stops process, wait it and continue.
+     * We will STOP it by timer (via SIGSTOP)
+     */
+    if (!wait4stop(ctx->pid))
+        err(1, "wait SIGSTOP of ptrace failed");
+
+    ptrace(PTRACE_CONT, ctx->pid, 0, 0);
+
 
     sprintf(ctx->procstat_path, "/proc/%d/stat", ctx->pid);
     sprintf(ctx->schedstat_path, "/proc/%d/schedstat", ctx->pid);
@@ -89,10 +96,7 @@ static int get_backtrace(struct ptrace_context *ctx, unw_word_t *ips, int max_de
 {
     unw_cursor_t resume_cursor, cursor;
 
-    if (!ctx->stopped) {
-        kill(ctx->pid, SIGSTOP);
-    }
-
+    kill(ctx->pid, SIGSTOP);
     if (!wait4stop(ctx->pid))
         err(1, "wait SIGSTOP of ptrace failed");
 
@@ -108,7 +112,6 @@ static int get_backtrace(struct ptrace_context *ctx, unw_word_t *ips, int max_de
 
     /* resume execution at top frame */
     _UPT_resume(ctx->addr_space, &resume_cursor, ctx->unwind_rctx);
-    ctx->stopped = false;
 
     return depth;
 }

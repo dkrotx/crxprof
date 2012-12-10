@@ -100,7 +100,6 @@ main(int argc, char *argv[])
     calltree_node *root = NULL;
 
     print_message("Attaching to process: %d", params.pid);
-    ptrace_ctx.stopped = false;
     attach_process(params.pid, &ptrace_ctx);
 
     itv.it_interval.tv_sec = 0;
@@ -118,7 +117,7 @@ main(int argc, char *argv[])
     for(;;) {
         unsigned n = params.prof_method == PROF_REALTIME ? 1 : get_cpudiff_us(&ptrace_ctx);
         char st = get_procstate(ptrace_ctx);
-        if (st != 'S')
+        if (st == 'R')
             fill_backtrace(n, &ptrace_ctx, funcs, &root);
 
         sleep(1);
