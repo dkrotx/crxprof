@@ -5,8 +5,12 @@
  */
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/wait.h>
+#include <sys/ptrace.h>
 #include <time.h>
 #include <signal.h>
+#include <errno.h>
+#include <assert.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -28,8 +32,9 @@
 #include "demangle.h"
 
 struct timeval tv_last_sigint = {0, 0};
-bool sigint_caught = false;
-bool sigint_caught_twice = false;
+static volatile bool sigint_caught = false;
+static volatile bool timer_alarmed = false;
+static volatile bool sigint_caught_twice = false;
 
 static char *g_progname;
 
@@ -51,14 +56,16 @@ on_sigint(int)
 void
 on_sigalarm(int)
 {
-    /* nothing, just break sleep() */
+    timer_alarmed = true;
+}
+
+void
+on_sigchld(int)
+{
+    /* just for hang up */
 }
 
 
-static void dump_profile(const std::vector<fn_descr> &funcs, calltree_node *root, const char *filename);
-static void read_symbols(pid_t pid, std::vector<fn_descr> *funcs);
-static void print_symbols(const std::vector<fn_descr> &fns);
-static void usage();
 
 #define FREQ_2PERIOD_USEC(n) ( 1000000 / (n) )
 
@@ -76,7 +83,18 @@ struct program_params
                        just_print_symbols(false) {}
 };
 
+
+typedef enum { WR_NOTHING, WR_FINISHED, WR_DETACHED, WR_STOPPED } waitres_t;
+static waitres_t do_wait(ptrace_context *ctx, bool blocked);
+static waitres_t discard_wait(ptrace_context *ctx);
+
+static void dump_profile(const std::vector<fn_descr> &funcs, calltree_node *root, const char *filename);
+static void read_symbols(pid_t pid, std::vector<fn_descr> *funcs);
+static void print_symbols(const std::vector<fn_descr> &fns);
 static bool parse_args(program_params *params, int argc, char **argv);
+static void usage();
+
+
 
 int
 main(int argc, char *argv[])
@@ -100,7 +118,19 @@ main(int argc, char *argv[])
     calltree_node *root = NULL;
 
     print_message("Attaching to process: %d", params.pid);
-    attach_process(params.pid, &ptrace_ctx);
+    if (!trace_init(params.pid, &ptrace_ctx))
+        err(1, "Failed to initialize unwind internals");
+
+    signal(SIGCHLD, on_sigchld);
+    if (ptrace(PTRACE_ATTACH, params.pid, 0, 0) == -1)
+        err(1, "ptrace(PTRACE_ATTACH) failed");
+
+    {
+        do_wait(&ptrace_ctx, true);
+        printf("STOPPED AT START\n");
+        ptrace(PTRACE_CONT, params.pid, 0, 0);
+    }
+
 
     itv.it_interval.tv_sec = 0;
     itv.it_interval.tv_usec = params.us_sleep;
@@ -115,19 +145,46 @@ main(int argc, char *argv[])
     signal(SIGINT, on_sigint);
 
     for(;;) {
-        unsigned n = params.prof_method == PROF_REALTIME ? 1 : get_cpudiff_us(&ptrace_ctx);
-        char st = get_procstate(ptrace_ctx);
-        if (st == 'R')
-            fill_backtrace(n, &ptrace_ctx, funcs, &root);
-
+        waitres_t wres = WR_NOTHING;
         sleep(1);
+        
+        if (timer_alarmed) {
+            uint64_t cpu_time = read_schedstat(ptrace_ctx);
+            bool need_prof = (params.prof_method == PROF_REALTIME);
+
+            if (params.prof_method == PROF_CPUTIME) {
+                char st = get_procstate(ptrace_ctx);
+                if (st == 'R')
+                    need_prof = true;
+            }
+
+            if (need_prof) {
+                kill(params.pid, SIGSTOP);
+                wres = do_wait(&ptrace_ctx, true);
+                if (wres == WR_STOPPED) {
+                    int signo_cont = (ptrace_ctx.stop_info.si_pid == getpid()) ? 0 : ptrace_ctx.stop_info.si_signo;
+                    fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, &ptrace_ctx, funcs, &root);
+                    if (ptrace(PTRACE_CONT, params.pid, 0, signo_cont) < 0)
+                        err(1, "ptrace(PTRACE_CONT) failed");
+                }
+                else if (wres == WR_DETACHED) {
+                    ptrace(PTRACE_CONT, params.pid, 0, ptrace_ctx.stop_info.si_signo);
+                }
+            }
+
+            ptrace_ctx.prev_cputime = cpu_time;
+        }
+
+        if (wres != WR_FINISHED && wres != WR_DETACHED) {
+            wres = discard_wait(&ptrace_ctx);
+        }
 
         if (sigint_caught_twice) {
             print_message("Exit");
             exit(0);
         }
 
-        if (sigint_caught) {
+        if (sigint_caught || wres == WR_FINISHED || wres == WR_DETACHED) {
             if (root) {
                 visualize_profile(root, params.vprops);
                 if (params.dumpfile)
@@ -135,13 +192,96 @@ main(int argc, char *argv[])
             } else
                 print_message("No symbolic snapshot caught yet!");
 
-
             sigint_caught = false;
             root = NULL; // TODO: clear 
+        }
+
+        if (wres == WR_FINISHED || wres == WR_DETACHED) {
+            if (wres == WR_DETACHED) {
+                printf("DETACHED\n");
+                (void)ptrace(PTRACE_DETACH, params.pid, 0, ptrace_ctx.stop_info.si_signo);
+            }
+
+            exit(0);
         }
     }
 
     return 0;
+}
+
+
+static waitres_t
+do_wait(ptrace_context *ctx, bool blocked)
+{
+    int status, ret;
+    do {
+        ret = waitpid(ctx->pid, &status, blocked ? 0 : WNOHANG);
+
+        if (ret == 0)
+            return WR_NOTHING;
+
+        if (ret == -1 && errno != EINTR)
+            err(2, "waitpid failed");
+    } while(ret < 0);
+
+    assert(ret == ctx->pid) ;
+    assert(!WIFCONTINUED(status));
+
+    if (WIFEXITED(status)) {
+        print_message("Traced process (%d) exited with code %d", ctx->pid, WEXITSTATUS(status));
+        return WR_FINISHED;
+    }
+    if (WIFSIGNALED(status)) {
+        print_message("Traced process (%d) terminated by signal %d (%s)", ctx->pid, 
+            WTERMSIG(status), strsignal(WTERMSIG(status)));
+        return WR_FINISHED;
+    }
+
+    assert(WIFSTOPPED(status));
+
+    if (ptrace(PTRACE_GETSIGINFO, ctx->pid, 0, &ctx->stop_info) < 0)
+        err(1, "PTRACE_GETSIGINFO failed");
+
+    /* The difference is "who stopped the process". This may be any signal sent to process (1)
+     * or its SIGSTOP (2) sent by us, or SIGSTOP or SIGTSTP (^Z) sent by other prcesses(3)
+     */
+    if (WSTOPSIG(status) == SIGSTOP) {
+        if (ctx->stop_info.si_pid == getpid())
+            return WR_STOPPED; /* [2] */
+    }
+    
+    /* [3] */
+    if (WSTOPSIG(status) == SIGSTOP || WSTOPSIG(status) == SIGTSTP || 
+        WSTOPSIG(status) == SIGTTIN || WSTOPSIG(status) == SIGTTOU) {
+        return WR_DETACHED;
+    }
+
+    return WR_STOPPED; /* [1] */
+}
+
+
+static waitres_t
+discard_wait(ptrace_context *ctx)
+{
+    for(;;) {
+        waitres_t wres = do_wait(ctx, false);
+
+        switch (wres) {
+            case WR_NOTHING:
+            case WR_FINISHED:
+            case WR_DETACHED:
+                return wres;
+
+            case WR_STOPPED:
+                if (ctx->stop_info.si_pid == getpid())
+                    ptrace(PTRACE_CONT, ctx->pid, 0, 0);
+                else {
+                    print_message("Reflecting signal %d (%s)", ctx->stop_info.si_signo, strsignal(ctx->stop_info.si_signo));
+                    ptrace(PTRACE_CONT, ctx->pid, 0, ctx->stop_info.si_signo);
+                }
+                break;
+        }
+    }
 }
 
 
@@ -153,14 +293,14 @@ parse_args(program_params *params, int argc, char **argv)
         enum { PRINT_FULL_STACK = 256, JUST_PRINT_SYMBOLS };
 
         static struct option long_opts[] = {
-            {"help",         no_argument,       0,  'h' },
-            {"freq",         required_argument, 0,  'f' },
-            {"full-stack",   no_argument,       0,   PRINT_FULL_STACK },
-            {"print-symbols", no_argument,      0,   JUST_PRINT_SYMBOLS },
-            {"max-depth",    required_argument, 0,  'm' },
-            {"realtime",     no_argument,       0,  'r' },
-            {"min-cost",     required_argument, 0,  'c' },
-            {"dump",         required_argument, 0,  'd' }
+            {"help",          no_argument,       0,  'h' },
+            {"freq",          required_argument, 0,  'f' },
+            {"full-stack",    no_argument,       0,   PRINT_FULL_STACK   },
+            {"print-symbols", no_argument,       0,   JUST_PRINT_SYMBOLS },
+            {"max-depth",     required_argument, 0,  'm' },
+            {"realtime",      no_argument,       0,  'r' },
+            {"min-cost",      required_argument, 0,  'c' },
+            {"dump",          required_argument, 0,  'd' }
         };
 
         c = getopt_long(argc, argv, "m:rc:d:f:h", long_opts, NULL);

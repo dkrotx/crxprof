@@ -24,10 +24,8 @@ struct calltree_node {
     const fn_descr *pfn;
     uint64_t nintermediate;
     uint64_t nself;
-
     siblings_t childs;
-    
-    
+
     calltree_node(const fn_descr *a_pfn) : pfn(a_pfn), nintermediate(0), nself(0) {}
 };
 
@@ -37,7 +35,8 @@ struct ptrace_context {
     pid_t pid;
     unw_addr_space_t addr_space;
     void *unwind_rctx;
-    uint64_t saved_cputime;
+    uint64_t prev_cputime;
+    siginfo_t stop_info;
     char schedstat_path[sizeof("/proc/4000000000/schedstat")];
     char procstat_path[sizeof("/proc/4000000000/stat")];
 };
@@ -52,9 +51,9 @@ struct vproperties {
 
 
 /* ptrace-related functions */
-void attach_process(pid_t pid, struct ptrace_context *ctx);
-unsigned get_cpudiff_us(ptrace_context *ctx);
-void fill_backtrace(unsigned cost, struct ptrace_context *ctx,
+bool trace_init(pid_t pid, struct ptrace_context *ctx);
+uint64_t read_schedstat(const ptrace_context &ctx);
+void fill_backtrace(uint64_t cost, struct ptrace_context *ctx,
                    const std::vector<fn_descr> &funcs, calltree_node **root);
 char get_procstate(const ptrace_context &ctx);
 

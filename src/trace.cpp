@@ -1,10 +1,8 @@
-#include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ptrace.h>
-#include <signal.h>
 #include <endian.h>
 #include <string.h>
 #include <stdio.h>
@@ -25,24 +23,9 @@ struct addr_comparator
 };
 
 
-static uint64_t read_schedstat(const ptrace_context &ctx);
-static int wait4stop(pid_t pid);
 static const fn_descr *lookup_fn_descr(long ip, const std::vector<fn_descr> &funcs);
 static int get_backtrace(struct ptrace_context *ctx, unw_word_t *ips, int max_depth);
 
-static int wait4stop(pid_t pid)
-{
-    int status;
-    
-    do {
-        if (waitpid(pid, &status, 0) == -1 || 
-            WIFEXITED(status) || WIFSIGNALED(status)) {
-            return 0;
-        }
-    } while( !WIFSTOPPED(status) );
-
-    return 1;
-}
 
 static const fn_descr *
 lookup_fn_descr(long ip, const std::vector<fn_descr> &funcs)
@@ -63,42 +46,30 @@ lookup_fn_descr(long ip, const std::vector<fn_descr> &funcs)
 }
 
 
-void attach_process(pid_t pid, struct ptrace_context *ctx)
+bool
+trace_init(pid_t pid, struct ptrace_context *ctx)
 {
     ctx->pid = pid;
     ctx->addr_space = unw_create_addr_space(&_UPT_accessors, __BYTE_ORDER);
     if (!ctx->addr_space)
-        err(EXIT_FAILURE, "Failed to create address space");
+        return false;
 
     unw_set_caching_policy(ctx->addr_space, UNW_CACHE_GLOBAL);
     ctx->unwind_rctx = _UPT_create(ctx->pid);
     if (!ctx->unwind_rctx)
-        err(EXIT_FAILURE, "_UPT_create failed");
-
-    if ( -1 == ptrace(PTRACE_ATTACH, pid, NULL, NULL) )
-        err(1, "ptrace(PTRACE_ATTACH, %d) failed", pid);
-
-    /* Since ptrace stops process, wait it and continue.
-     * We will STOP it by timer (via SIGSTOP)
-     */
-    if (!wait4stop(ctx->pid))
-        err(1, "wait SIGSTOP of ptrace failed");
-
-    ptrace(PTRACE_CONT, ctx->pid, 0, 0);
-
+        return false;
 
     sprintf(ctx->procstat_path, "/proc/%d/stat", ctx->pid);
     sprintf(ctx->schedstat_path, "/proc/%d/schedstat", ctx->pid);
-    ctx->saved_cputime = read_schedstat(*ctx);
+    ctx->prev_cputime = read_schedstat(*ctx);
+
+    return true;
 }
 
-static int get_backtrace(struct ptrace_context *ctx, unw_word_t *ips, int max_depth)
+static int
+get_backtrace(struct ptrace_context *ctx, unw_word_t *ips, int max_depth)
 {
     unw_cursor_t resume_cursor, cursor;
-
-    kill(ctx->pid, SIGSTOP);
-    if (!wait4stop(ctx->pid))
-        err(1, "wait SIGSTOP of ptrace failed");
 
     if (unw_init_remote(&cursor, ctx->addr_space, ctx->unwind_rctx))
         err(1, "unw_init_remote failed");
@@ -111,14 +82,15 @@ static int get_backtrace(struct ptrace_context *ctx, unw_word_t *ips, int max_de
     } while (depth < max_depth && unw_step(&cursor) > 0);
 
     /* resume execution at top frame */
-    _UPT_resume(ctx->addr_space, &resume_cursor, ctx->unwind_rctx);
+    // _UPT_resume(ctx->addr_space, &resume_cursor, ctx->unwind_rctx);
 
     return depth;
 }
 
 
-void fill_backtrace(unsigned cost, struct ptrace_context *ctx, 
-                    const std::vector<fn_descr> &funcs, calltree_node **root)
+void
+fill_backtrace(uint64_t cost, struct ptrace_context *ctx, 
+               const std::vector<fn_descr> &funcs, calltree_node **root)
 {
     static unw_word_t ips[MAX_STACK_DEPTH];
     int depth = get_backtrace(ctx, &ips[0], MAX_STACK_DEPTH);
@@ -169,7 +141,7 @@ void fill_backtrace(unsigned cost, struct ptrace_context *ctx,
 /* format of /proc/$pid/schedstat:
  * cputime_ns iowait_ns nswitches
  */
-static uint64_t
+uint64_t
 read_schedstat(const ptrace_context &ctx)
 {
     uint64_t us = -1U;
@@ -210,14 +182,4 @@ get_procstate(const ptrace_context &ctx)
     }
 
     return ret;
-}
-
-unsigned
-get_cpudiff_us(ptrace_context *ctx)
-{
-    uint64_t cur_cputime = read_schedstat(*ctx);
-    uint64_t diff_cputime = cur_cputime - ctx->saved_cputime;
-
-    ctx->saved_cputime = cur_cputime;
-    return diff_cputime;
 }
