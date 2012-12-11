@@ -31,14 +31,21 @@ struct calltree_node {
 
 enum crxprof_method { PROF_REALTIME = 1, PROF_CPUTIME = 2, PROF_IOWAIT = 4 };
 
+struct trace_stack {
+    unw_word_t ips[MAX_STACK_DEPTH];
+    int depth;
+};
+
 struct ptrace_context {
     pid_t pid;
     unw_addr_space_t addr_space;
     void *unwind_rctx;
     uint64_t prev_cputime;
     siginfo_t stop_info;
+
     char schedstat_path[sizeof("/proc/4000000000/schedstat")];
     char procstat_path[sizeof("/proc/4000000000/stat")];
+    struct trace_stack stk;
 };
 
 struct vproperties {
@@ -52,10 +59,11 @@ struct vproperties {
 
 /* ptrace-related functions */
 bool trace_init(pid_t pid, struct ptrace_context *ctx);
-uint64_t read_schedstat(const ptrace_context &ctx);
-void fill_backtrace(uint64_t cost, struct ptrace_context *ctx,
+bool get_backtrace(struct ptrace_context *ctx);
+void fill_backtrace(uint64_t cost, const struct trace_stack &stk, 
                    const std::vector<fn_descr> &funcs, calltree_node **root);
-char get_procstate(const ptrace_context &ctx);
+uint64_t read_schedstat(const ptrace_context &ctx);
+char get_procstate(const ptrace_context &ctx); /* One character from the string "RSDZTW" */
 
 /* visualize and dumps */
 void visualize_profile(calltree_node *root, const vproperties &vprops);

@@ -23,10 +23,6 @@ struct addr_comparator
 };
 
 
-static const fn_descr *lookup_fn_descr(long ip, const std::vector<fn_descr> &funcs);
-static int get_backtrace(struct ptrace_context *ctx, unw_word_t *ips, int max_depth);
-
-
 static const fn_descr *
 lookup_fn_descr(long ip, const std::vector<fn_descr> &funcs)
 {
@@ -66,44 +62,38 @@ trace_init(pid_t pid, struct ptrace_context *ctx)
     return true;
 }
 
-static int
-get_backtrace(struct ptrace_context *ctx, unw_word_t *ips, int max_depth)
+bool
+get_backtrace(struct ptrace_context *ctx)
 {
-    unw_cursor_t resume_cursor, cursor;
+    struct trace_stack *pstk = &ctx->stk;
+    unw_cursor_t cursor;
+    pstk->depth = 0;
 
     if (unw_init_remote(&cursor, ctx->addr_space, ctx->unwind_rctx))
-        err(1, "unw_init_remote failed");
+        return false;
 
-    resume_cursor = cursor;
-    
-    int depth = 0;
     do {
-        unw_get_reg(&cursor, UNW_REG_IP, &ips[depth++]);
-    } while (depth < max_depth && unw_step(&cursor) > 0);
+        unw_get_reg(&cursor, UNW_REG_IP, &pstk->ips[pstk->depth++]);
+    } while (pstk->depth < MAX_STACK_DEPTH && unw_step(&cursor) > 0);
 
-    /* resume execution at top frame */
-    // _UPT_resume(ctx->addr_space, &resume_cursor, ctx->unwind_rctx);
-
-    return depth;
+    return true;
 }
 
 
 void
-fill_backtrace(uint64_t cost, struct ptrace_context *ctx, 
+fill_backtrace(uint64_t cost, const struct trace_stack &stk, 
                const std::vector<fn_descr> &funcs, calltree_node **root)
 {
-    static unw_word_t ips[MAX_STACK_DEPTH];
-    int depth = get_backtrace(ctx, &ips[0], MAX_STACK_DEPTH);
-
-    if (depth == MAX_STACK_DEPTH) {
+    if (stk.depth == 0 || stk.depth >= MAX_STACK_DEPTH) {
         // too small size of ips. So, we don't have start frame here.
         // Simply ignore
         return;
     }
 
     calltree_node *parent = NULL;
-    for (--depth; depth >= 0; depth--) {
-        const fn_descr *pfn = lookup_fn_descr(ips[depth], funcs);
+    int depth = stk.depth - 1;
+    while (depth >= 0) {
+        const fn_descr *pfn = lookup_fn_descr(stk.ips[depth--], funcs);
         if (pfn)
         {
             if (parent) {

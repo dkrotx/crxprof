@@ -163,9 +163,15 @@ main(int argc, char *argv[])
                 wres = do_wait(&ptrace_ctx, true);
                 if (wres == WR_STOPPED) {
                     int signo_cont = (ptrace_ctx.stop_info.si_pid == getpid()) ? 0 : ptrace_ctx.stop_info.si_signo;
-                    fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, &ptrace_ctx, funcs, &root);
+
+                    if (!get_backtrace(&ptrace_ctx))
+                        err(2, "failed to get backtrace of process");
+
+                    /* continue tracee ASAP */
                     if (ptrace(PTRACE_CONT, params.pid, 0, signo_cont) < 0)
                         err(1, "ptrace(PTRACE_CONT) failed");
+
+                    fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, ptrace_ctx.stk, funcs, &root);
                 }
                 else if (wres == WR_DETACHED) {
                     ptrace(PTRACE_CONT, params.pid, 0, ptrace_ctx.stop_info.si_signo);
