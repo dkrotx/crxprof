@@ -3,11 +3,16 @@
  *
  * Entry point of crxprof. Parse arguments and collect symbols of given process (ID).
  */
+
+#define __STDC_FORMAT_MACROS
+
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/times.h>
 #include <sys/wait.h>
 #include <sys/ptrace.h>
 #include <time.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <errno.h>
 #include <assert.h>
@@ -118,9 +123,11 @@ main(int argc, char *argv[])
     calltree_node *root = NULL;
 
     print_message("Attaching to process: %d", params.pid);
+    memset(&ptrace_ctx, 0, sizeof(ptrace_ctx));
     if (!trace_init(params.pid, &ptrace_ctx))
         err(1, "Failed to initialize unwind internals");
 
+    ptrace_ctx.prev_cputime = get_cputime_ns(&ptrace_ctx);
     signal(SIGCHLD, on_sigchld);
     if (ptrace(PTRACE_ATTACH, params.pid, 0, 0) == -1)
         err(1, "ptrace(PTRACE_ATTACH) failed");
@@ -149,7 +156,7 @@ main(int argc, char *argv[])
         sleep(1);
         
         if (timer_alarmed) {
-            uint64_t cpu_time = read_schedstat(ptrace_ctx);
+            uint64_t cpu_time = get_cputime_ns(&ptrace_ctx);
             bool need_prof = (params.prof_method == PROF_REALTIME);
 
             if (params.prof_method == PROF_CPUTIME) {
@@ -171,11 +178,13 @@ main(int argc, char *argv[])
                     if (ptrace(PTRACE_CONT, params.pid, 0, signo_cont) < 0)
                         err(1, "ptrace(PTRACE_CONT) failed");
 
-                    fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, ptrace_ctx.stk, funcs, &root);
+                    if (fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, ptrace_ctx.stk, funcs, &root))
+                        ptrace_ctx.nsnaps_accounted++;
                 }
                 else if (wres == WR_DETACHED) {
                     ptrace(PTRACE_CONT, params.pid, 0, ptrace_ctx.stop_info.si_signo);
                 }
+                ptrace_ctx.nsnaps++;
             }
 
             ptrace_ctx.prev_cputime = cpu_time;
@@ -192,6 +201,9 @@ main(int argc, char *argv[])
 
         if (sigint_caught || wres == WR_FINISHED || wres == WR_DETACHED) {
             if (root) {
+                print_message("%" PRIu64 " snapshot interrputs got (%" PRIu64 " dropped)", 
+                    ptrace_ctx.nsnaps, ptrace_ctx.nsnaps - ptrace_ctx.nsnaps_accounted);
+
                 visualize_profile(root, params.vprops);
                 if (params.dumpfile)
                     dump_profile(funcs, root, params.dumpfile);
@@ -200,6 +212,7 @@ main(int argc, char *argv[])
 
             sigint_caught = false;
             root = NULL; // TODO: clear 
+            ptrace_ctx.nsnaps = ptrace_ctx.nsnaps_accounted = 0;
         }
 
         if (wres == WR_FINISHED || wres == WR_DETACHED) {

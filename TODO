@@ -1,14 +1,10 @@
 critical:
-- cont right from start (even if no CPU events). elsewere - starvation
-- adopting to /proc/pid/schedstat (nanosec/usec/msec)
-- fix REALTIME profile
 
 critical for user-usage:
 - full usage
 - mode: ./crxprof [options] -- cmd ...
 
 
-- reset errno for ptrace
 - show unknown bts
 - comments in callgrind (usage, time spent, ...)
 - starting info (CPU% IO% wall_clock)

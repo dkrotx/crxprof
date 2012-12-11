@@ -42,10 +42,13 @@ struct ptrace_context {
     void *unwind_rctx;
     uint64_t prev_cputime;
     siginfo_t stop_info;
+    clockid_t clock_id;
 
-    char schedstat_path[sizeof("/proc/4000000000/schedstat")];
     char procstat_path[sizeof("/proc/4000000000/stat")];
     struct trace_stack stk;
+
+    uint64_t nsnaps;
+    uint64_t nsnaps_accounted;
 };
 
 struct vproperties {
@@ -60,9 +63,9 @@ struct vproperties {
 /* ptrace-related functions */
 bool trace_init(pid_t pid, struct ptrace_context *ctx);
 bool get_backtrace(struct ptrace_context *ctx);
-void fill_backtrace(uint64_t cost, const struct trace_stack &stk, 
+bool fill_backtrace(uint64_t cost, const struct trace_stack &stk, 
                    const std::vector<fn_descr> &funcs, calltree_node **root);
-uint64_t read_schedstat(const ptrace_context &ctx);
+uint64_t get_cputime_ns(struct ptrace_context *ctx);
 char get_procstate(const ptrace_context &ctx); /* One character from the string "RSDZTW" */
 
 /* visualize and dumps */

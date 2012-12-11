@@ -1,7 +1,7 @@
 CFLAGS=-Wall -Wextra -g
 CXXFLAGS=$(CFLAGS)
 #LDFLAGS=-static
-LIBS=-lunwind-ptrace -lunwind-x86_64 -lunwind -lbfd -liberty -lz -ldl
+LIBS=-lunwind-ptrace -lunwind-x86_64 -lunwind -lbfd -liberty -lz -ldl -lrt
 
 crxprof: src/trace.o src/visualize.o src/callgrind_dump.o src/utils.o src/elf_read.o src/maps.o src/main.o  
 	$(CXX) -g -o $@ $^ ${LDFLAGS} ${LIBS}

@@ -1,3 +1,5 @@
+#define _XOPEN_SOURCE 600
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -5,6 +7,7 @@
 #include <sys/ptrace.h>
 #include <endian.h>
 #include <string.h>
+#include <time.h>
 #include <stdio.h>
 #include <err.h>
 #include "crxprof.hpp"
@@ -55,11 +58,22 @@ trace_init(pid_t pid, struct ptrace_context *ctx)
     if (!ctx->unwind_rctx)
         return false;
 
-    sprintf(ctx->procstat_path, "/proc/%d/stat", ctx->pid);
-    sprintf(ctx->schedstat_path, "/proc/%d/schedstat", ctx->pid);
-    ctx->prev_cputime = read_schedstat(*ctx);
+    if (clock_getcpuclockid(pid, &ctx->clock_id) != 0)
+        return false;
 
+    sprintf(ctx->procstat_path, "/proc/%d/stat", pid);
     return true;
+}
+
+
+uint64_t
+get_cputime_ns(struct ptrace_context *ctx)
+{
+    struct timespec ts;
+
+    if (clock_gettime(ctx->clock_id, &ts) == -1) 
+        return -1;
+    return (ts.tv_sec * 1000000000 + ts.tv_nsec);
 }
 
 bool
@@ -80,14 +94,14 @@ get_backtrace(struct ptrace_context *ctx)
 }
 
 
-void
+bool
 fill_backtrace(uint64_t cost, const struct trace_stack &stk, 
                const std::vector<fn_descr> &funcs, calltree_node **root)
 {
     if (stk.depth == 0 || stk.depth >= MAX_STACK_DEPTH) {
         // too small size of ips. So, we don't have start frame here.
         // Simply ignore
-        return;
+        return false;
     }
 
     calltree_node *parent = NULL;
@@ -126,31 +140,8 @@ fill_backtrace(uint64_t cost, const struct trace_stack &stk,
 
     if (parent)
         parent->nself += cost;
-}
 
-/* format of /proc/$pid/schedstat:
- * cputime_ns iowait_ns nswitches
- */
-uint64_t
-read_schedstat(const ptrace_context &ctx)
-{
-    uint64_t us = -1U;
-    int fd = open(ctx.schedstat_path, O_RDONLY);
-
-    if (fd != -1) {
-        static char buf[20];
-        ssize_t n = read(fd, buf, sizeof(buf));
-        if (n > 2) {
-            char *pend = (char *)memchr(buf, ' ', n);
-            if (pend) {
-                *pend = '\0';
-                us = strtoll(buf, NULL, 10) / 1000;
-            }
-        }
-        close(fd);
-    }
-
-    return us;
+    return true;
 }
 
 

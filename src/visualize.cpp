@@ -10,9 +10,9 @@ struct nodes_weight_cmp
     }
 };
 
-static unsigned count_calls(const calltree_node *node)
+static uint64_t count_calls(const calltree_node *node)
 {
-    unsigned n = node->nself;
+    uint64_t n = node->nself;
 
     for (siblings_t::const_iterator it = node->childs.begin(); 
          it != node->childs.end(); it++) {
@@ -23,9 +23,9 @@ static unsigned count_calls(const calltree_node *node)
 }
 
 static void show_layer(const vproperties &vprops, calltree_node *node, 
-                       int nsnaps, int depth = 0, bool is_last = false)
+                       uint64_t total_cost, int depth = 0, bool is_last = false)
 {
-  int percent_full = (long long)(node->nintermediate + node->nself) * 100 / nsnaps;
+  int percent_full = (long long)(node->nintermediate + node->nself) * 100 / total_cost;
   
   if (percent_full >= vprops.min_cost) 
   {
@@ -41,14 +41,14 @@ static void show_layer(const vproperties &vprops, calltree_node *node,
         }
       }
 
-      int percent_self = (long long)(node->nself) * 100 / nsnaps;
+      int percent_self = node->nself * 100 / total_cost;
       
       printf("%.60s (%d%% | %d%% self)\n", node->pfn->name, percent_full, percent_self);
       std::sort(node->childs.begin(), node->childs.end(), nodes_weight_cmp());
 
       int n = node->childs.size();
       for (int i = 0; i < n; i++) {
-          show_layer(vprops, node->childs[i], nsnaps, 
+          show_layer(vprops, node->childs[i], total_cost, 
                      depth + 1, is_last || (depth == 1 && i == n-1));
       }
   }
@@ -57,16 +57,15 @@ static void show_layer(const vproperties &vprops, calltree_node *node,
 
 void visualize_profile(calltree_node *root, const vproperties &vprops)
 {
-    unsigned nsnaps = count_calls(root);
-    
-    print_message("%d snapshots caught:", nsnaps);
-    if (nsnaps) {
+    uint64_t total_cost = count_calls(root);
+
+    if (total_cost) {
         calltree_node *start = root;
         
         if (!vprops.print_fullstack) {
             while (!start->nself && start->childs.size() == 1)
                 start = start->childs[0];
         }
-        show_layer(vprops, start, nsnaps);
+        show_layer(vprops, start, total_cost);
     }
 }
