@@ -17,6 +17,11 @@
 #include <errno.h>
 #include <assert.h>
 
+
+/* work-around compilation error on redifinition basename() */
+#define HAVE_DECL_BASENAME 1
+#include <demangle.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,12 +34,9 @@
 #include <string>
 #include <algorithm>
 
-/* work-around compilation error on redifinition basename() */
-#define HAVE_DECL_BASENAME 1
 
 #include "crxprof.hpp"
 #include "symbols.h"
-#include "demangle.h"
 
 struct timeval tv_last_sigint = {0, 0};
 static volatile bool sigint_caught = false;

@@ -2,7 +2,6 @@ critical:
 
 critical for user-usage:
 - full usage
-- mode: ./crxprof [options] -- cmd ...
 
 
 - show unknown bts
@@ -10,14 +9,9 @@ critical for user-usage:
 - starting info (CPU% IO% wall_clock)
 - alloc for nodes (and no memleaking)
 - reset stat or not
+- mode: ./crxprof [options] -- cmd ...
 
-- build system
 - man
 - blog-record
 
 - (optional) short names for symbols
-- (optional) ability to account IOWAIT
-
-discover:
-- EINTR in wait(2) [strange bug]
-- strange things with syscalls accounting. Libc wrappers should be seen
