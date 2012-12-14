@@ -17,11 +17,6 @@
 #include <errno.h>
 #include <assert.h>
 
-
-/* work-around compilation error on redifinition basename() */
-#define HAVE_DECL_BASENAME 1
-#include <demangle.h>
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -101,7 +96,12 @@ static void print_symbols(const std::vector<fn_descr> &fns);
 static bool parse_args(program_params *params, int argc, char **argv);
 static void usage();
 
-
+#define DMGL_AUTO        (1 << 8)
+#define AUTO_DEMANGLING DMGL_AUTO
+extern "C" 
+{
+  extern char *cplus_demangle (const char *mangled, int options);
+}
 
 int
 main(int argc, char *argv[])
@@ -260,8 +260,10 @@ do_wait(ptrace_context *ctx, bool blocked)
 
     assert(WIFSTOPPED(status));
 
-    if (ptrace(PTRACE_GETSIGINFO, ctx->pid, 0, &ctx->stop_info) < 0)
-        err(1, "PTRACE_GETSIGINFO failed");
+    if (ptrace(PTRACE_GETSIGINFO, ctx->pid, 0, &ctx->stop_info) < 0) {
+        warn("PTRACE_GETSIGINFO failed");
+        return WR_STOPPED; /* definitely group-stop */
+    }
 
     /* The difference is "who stopped the process". This may be any signal sent to process (1)
      * or its SIGSTOP (2) sent by us, or SIGSTOP or SIGTSTP (^Z) sent by other prcesses(3)
@@ -399,6 +401,11 @@ read_symbols(pid_t pid, std::vector<fn_descr> *funcs)
 {
     struct maps_ctx *mctx;
     struct maps_info *minf;
+    char *exe;
+
+    exe = proc_get_exefilename(pid);
+    if (!exe)
+        err(1, "Failed to get path of %d", pid);
 
     elfreader_init();
     mctx = maps_fopen(pid);
@@ -407,53 +414,57 @@ read_symbols(pid_t pid, std::vector<fn_descr> *funcs)
     
     while ((minf = maps_readnext(mctx)) != NULL) {
         if ((minf->prot & PROT_EXEC) && minf->pathname[0] == '/') {
-            print_message("reading symbols from %s", minf->pathname);
             elf_reader_t *er;
 
-            // [1] read text table
-            er = elf_read_textf(minf->pathname);
+            if (!strcmp(minf->pathname, exe)) {
+                print_message("reading symbols from %s (exe)", minf->pathname);
+                // [1] read text table
+                er = elf_read_textf(minf->pathname);
 
-            if (!er)
-                err(1, "Failed to read text data from %s", minf->pathname);
+                if (!er)
+                    err(1, "Failed to read text data from %s", minf->pathname);
 
-            for (int i = 0; i < er->nsymbols; i++) {
-                const elf_symbol_t &es = er->symbols[i];
-                if (es.symbol_class == 'T') {
-                    fn_descr descr;
+                for (int i = 0; i < er->nsymbols; i++) {
+                    const elf_symbol_t &es = er->symbols[i];
+                    if (es.symbol_class == 'T') {
+                        fn_descr descr;
 
-                    descr.name = strdup(cplus_demangle(es.symbol_name, AUTO_DEMANGLING) ?: es.symbol_name);
-                    descr.addr = (long)es.symbol_value;
-                    descr.len  = es.symbol_size;
+                        descr.name = strdup(cplus_demangle(es.symbol_name, AUTO_DEMANGLING) ?: es.symbol_name);
+                        descr.addr = (long)es.symbol_value;
+                        descr.len  = es.symbol_size;
 
-                    funcs->push_back(descr);
+                        funcs->push_back(descr);
+                    }
                 }
+                elfreader_close(er);
             }
-            elfreader_close(er);
+            else {
+                // [2] read dynamic table
+                off_t load_offset = minf->offset;
+                off_t load_end = minf->offset + ((char *)minf->end_addr - (char *)minf->start_addr);
+                er = elf_read_dynaf(minf->pathname);
 
+                print_message("reading symbols from %s (dynlib)", minf->pathname);
 
-            // [2] read dynamic table
-            off_t load_offset = minf->offset;
-            off_t load_end = minf->offset + ((char *)minf->end_addr - (char *)minf->start_addr);
-            er = elf_read_dynaf(minf->pathname);
+                if (!er)
+                    err(1, "Failed to read dynamic data from %s", minf->pathname);
 
-            if (!er)
-                err(1, "Failed to read dynamic data from %s", minf->pathname);
+                for (int i = 0; i < er->nsymbols; i++) {
+                    const elf_symbol &es = er->symbols[i];
+                    if ((es.symbol_class == 'T' || es.symbol_class == 'W') && 
+                        (off_t)es.symbol_value >= load_offset && (off_t)es.symbol_value < load_end) 
+                    {
+                        fn_descr descr;
 
-            for (int i = 0; i < er->nsymbols; i++) {
-                const elf_symbol &es = er->symbols[i];
-                if ((es.symbol_class == 'T' || es.symbol_class == 'W') && 
-                    (off_t)es.symbol_value >= load_offset && (off_t)es.symbol_value < load_end) 
-                {
-                    fn_descr descr;
+                        descr.name = strdup(cplus_demangle(es.symbol_name, AUTO_DEMANGLING) ?: es.symbol_name);
+                        descr.addr = (long)((off_t)es.symbol_value - load_offset + (char *)minf->start_addr);
+                        descr.len  = es.symbol_size;
 
-                    descr.name = strdup(cplus_demangle(es.symbol_name, AUTO_DEMANGLING) ?: es.symbol_name);
-                    descr.addr = (long)((off_t)es.symbol_value - load_offset + (char *)minf->start_addr);
-                    descr.len  = es.symbol_size;
-
-                    funcs->push_back(descr);
+                        funcs->push_back(descr);
+                    }
                 }
+                elfreader_close(er);
             }
-            elfreader_close(er);
         }
         maps_free(minf);
     }

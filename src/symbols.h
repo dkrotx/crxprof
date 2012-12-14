@@ -29,6 +29,12 @@ struct maps_ctx
     size_t linebuf_size;
 };
 
+/*
+ * return path to executable of given pid
+ * NULL in case of error
+ * Caller responsible to free() returned string
+ */
+char *proc_get_exefilename(pid_t pid);
 
 struct maps_ctx *maps_fopen(pid_t pid);
 struct maps_info* maps_readnext(struct maps_ctx *ctx);

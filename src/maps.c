@@ -3,6 +3,7 @@
  *
  * Parse data from /proc/pid/maps
  */
+#include <limits.h>
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
@@ -124,4 +125,32 @@ maps_close(struct maps_ctx *ctx)
         fclose(ctx->procfile);
         ctx->procfile = NULL;
     }
+}
+
+
+/*
+ * For most files under the /proc directory, stat() does not return the file size in the st_size field
+ * So, use pretty old PATH_MAX
+ */
+char *
+proc_get_exefilename(pid_t pid)
+{
+    char exepath[sizeof("/proc/4000000000/exe")];
+    char *linkname;
+    ssize_t r;
+
+    sprintf(exepath, "/proc/%d/exe", pid);
+    
+    linkname = malloc(PATH_MAX + 1);
+    if (!linkname)
+        return NULL;
+
+    r = readlink(exepath, linkname, PATH_MAX);
+    if (r < 0) {
+        free(linkname);
+        return NULL;
+    }
+
+    linkname[r] = '\0';
+    return linkname;
 }
