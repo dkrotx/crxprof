@@ -5,8 +5,8 @@
 #include <libunwind.h>
 #include <stdint.h>
 #include <vector>
-#include "defs.hpp"
 
+#define DEFAULT_MINCOST         5 /* % */
 #define DEFAULT_FREQ            100
 #define MAX_STACK_DEPTH         128
 
@@ -41,8 +41,8 @@ struct ptrace_context {
     unw_addr_space_t addr_space;
     void *unwind_rctx;
     uint64_t prev_cputime;
-    siginfo_t stop_info;
     clockid_t clock_id;
+    int stop_signal;
 
     char procstat_path[sizeof("/proc/4000000000/stat")];
     struct trace_stack stk;
@@ -56,7 +56,7 @@ struct vproperties {
     int  min_cost;
     bool print_fullstack;
 
-    vproperties() : max_depth(-1U), min_cost(5), print_fullstack(false)  {}
+    vproperties() : max_depth(-1U), min_cost(DEFAULT_MINCOST), print_fullstack(false)  {}
 };
 
 

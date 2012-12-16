@@ -1,17 +1,15 @@
 critical:
 
 critical for user-usage:
-- full usage
 
 
 - show unknown bts
 - comments in callgrind (usage, time spent, ...)
+- compact percents for callgrind (we know min)
 - starting info (CPU% IO% wall_clock)
-- alloc for nodes (and no memleaking)
 - reset stat or not
 - mode: ./crxprof [options] -- cmd ...
 
 - man
-- blog-record
 
 - (optional) short names for symbols

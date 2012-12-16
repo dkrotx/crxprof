@@ -24,7 +24,7 @@ AC_CHECK_HEADERS([fcntl.h inttypes.h stdint.h stdlib.h string.h sys/time.h unist
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
-AC_CHECK_TYPES(off_t, pid_t, size_t, ssize_t uint64_t)
+AC_CHECK_TYPES([off_t, pid_t, size_t, ssize_t, uint64_t])
 
 # Checks for library functions.
 AC_HEADER_MAJOR

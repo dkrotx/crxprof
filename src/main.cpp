@@ -86,7 +86,7 @@ struct program_params
 };
 
 
-typedef enum { WR_NOTHING, WR_FINISHED, WR_DETACHED, WR_STOPPED } waitres_t;
+typedef enum { WR_NOTHING, WR_FINISHED, WR_NEED_DETACH, WR_STOPPED } waitres_t;
 static waitres_t do_wait(ptrace_context *ctx, bool blocked);
 static waitres_t discard_wait(ptrace_context *ctx);
 
@@ -94,8 +94,13 @@ static void dump_profile(const std::vector<fn_descr> &funcs, calltree_node *root
 static void read_symbols(pid_t pid, std::vector<fn_descr> *funcs);
 static void print_symbols(const std::vector<fn_descr> &fns);
 static bool parse_args(program_params *params, int argc, char **argv);
+static long ptrace_verbose(enum __ptrace_request request, pid_t pid,
+                   void *addr, intptr_t data);
 static void usage();
 
+/* Use -liberty for demangling.
+ * Most distribustions doestn't provide demangle.h
+ */
 #define DMGL_AUTO        (1 << 8)
 #define AUTO_DEMANGLING DMGL_AUTO
 extern "C" 
@@ -106,6 +111,7 @@ extern "C"
 int
 main(int argc, char *argv[])
 {
+    bool need_exit = false;
     std::vector<fn_descr> funcs;
     ptrace_context ptrace_ctx;
     program_params params;
@@ -134,13 +140,14 @@ main(int argc, char *argv[])
     if (ptrace(PTRACE_ATTACH, params.pid, 0, 0) == -1)
         err(1, "ptrace(PTRACE_ATTACH) failed");
 
-    {
-        do_wait(&ptrace_ctx, true);
-        printf("STOPPED AT START\n");
-        ptrace(PTRACE_CONT, params.pid, 0, 0);
-    }
+    if (do_wait(&ptrace_ctx, true) != WR_STOPPED)
+        err(1, "Error occured while stopping the process");
+
+    if (ptrace(PTRACE_CONT, params.pid, 0, 0) < 0)
+        err(1, "Error occured while stopping the process 2");
 
 
+    /* interval timer for snapshots */
     itv.it_interval.tv_sec = 0;
     itv.it_interval.tv_usec = params.us_sleep;
     itv.it_value = itv.it_interval;
@@ -153,7 +160,8 @@ main(int argc, char *argv[])
     print_message("Press ^C once to show profile, twice to quit");
     signal(SIGINT, on_sigint);
 
-    for(;;) {
+    while(!need_exit)
+    {
         waitres_t wres = WR_NOTHING;
         sleep(1);
         
@@ -171,37 +179,32 @@ main(int argc, char *argv[])
                 kill(params.pid, SIGSTOP);
                 wres = do_wait(&ptrace_ctx, true);
                 if (wres == WR_STOPPED) {
-                    int signo_cont = (ptrace_ctx.stop_info.si_pid == getpid()) ? 0 : ptrace_ctx.stop_info.si_signo;
+                    int signo_cont = (ptrace_ctx.stop_signal == SIGSTOP) ? 0 : ptrace_ctx.stop_signal;
 
                     if (!get_backtrace(&ptrace_ctx))
                         err(2, "failed to get backtrace of process");
 
                     /* continue tracee ASAP */
-                    if (ptrace(PTRACE_CONT, params.pid, 0, signo_cont) < 0)
+                    if (ptrace_verbose(PTRACE_CONT, params.pid, 0, signo_cont) < 0)
                         err(1, "ptrace(PTRACE_CONT) failed");
 
+                    ptrace_ctx.nsnaps++;
                     if (fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, ptrace_ctx.stk, funcs, &root))
                         ptrace_ctx.nsnaps_accounted++;
                 }
-                else if (wres == WR_DETACHED) {
-                    ptrace(PTRACE_CONT, params.pid, 0, ptrace_ctx.stop_info.si_signo);
-                }
-                ptrace_ctx.nsnaps++;
             }
 
             ptrace_ctx.prev_cputime = cpu_time;
         }
 
-        if (wres != WR_FINISHED && wres != WR_DETACHED) {
+        if (wres != WR_FINISHED && wres != WR_NEED_DETACH) {
             wres = discard_wait(&ptrace_ctx);
         }
 
-        if (sigint_caught_twice) {
-            print_message("Exit");
-            exit(0);
-        }
 
-        if (sigint_caught || wres == WR_FINISHED || wres == WR_DETACHED) {
+        if (sigint_caught_twice) {
+            need_exit = true;
+        } else if (sigint_caught || wres == WR_FINISHED || wres == WR_NEED_DETACH) {
             if (root) {
                 print_message("%" PRIu64 " snapshot interrputs got (%" PRIu64 " dropped)", 
                     ptrace_ctx.nsnaps, ptrace_ctx.nsnaps - ptrace_ctx.nsnaps_accounted);
@@ -211,23 +214,33 @@ main(int argc, char *argv[])
                     dump_profile(funcs, root, params.dumpfile);
             } else
                 print_message("No symbolic snapshot caught yet!");
-
+    
             sigint_caught = false;
-            root = NULL; // TODO: clear 
-            ptrace_ctx.nsnaps = ptrace_ctx.nsnaps_accounted = 0;
         }
 
-        if (wres == WR_FINISHED || wres == WR_DETACHED) {
-            if (wres == WR_DETACHED) {
-                printf("DETACHED\n");
-                (void)ptrace(PTRACE_DETACH, params.pid, 0, ptrace_ctx.stop_info.si_signo);
-            }
+        if (wres == WR_FINISHED || wres == WR_NEED_DETACH) {
+            if (wres == WR_NEED_DETACH)
+                (void)ptrace_verbose(PTRACE_DETACH, params.pid, 0, ptrace_ctx.stop_signal);
 
-            exit(0);
+            need_exit = true;
         }
     }
 
     return 0;
+}
+
+
+static long 
+ptrace_verbose(enum __ptrace_request request, pid_t pid,
+               void *addr, intptr_t data)
+{
+    if ((request == PTRACE_CONT || request == PTRACE_DETACH) && data != 0)
+        printf("Reflecting signal %d (%s)\n", (int)data, strsignal(data));
+
+    if (request == PTRACE_DETACH)
+        printf("Detach from process #%d\n", (int)pid);
+
+    return ptrace(request, pid, addr, data);
 }
 
 
@@ -259,27 +272,14 @@ do_wait(ptrace_context *ctx, bool blocked)
     }
 
     assert(WIFSTOPPED(status));
+    ctx->stop_signal = WSTOPSIG(status);
 
-    if (ptrace(PTRACE_GETSIGINFO, ctx->pid, 0, &ctx->stop_info) < 0) {
-        warn("PTRACE_GETSIGINFO failed");
-        return WR_STOPPED; /* definitely group-stop */
+    if (ctx->stop_signal == SIGTSTP || 
+        ctx->stop_signal == SIGTTIN || ctx->stop_signal == SIGTTOU) {
+        return WR_NEED_DETACH;
     }
-
-    /* The difference is "who stopped the process". This may be any signal sent to process (1)
-     * or its SIGSTOP (2) sent by us, or SIGSTOP or SIGTSTP (^Z) sent by other prcesses(3)
-     */
-    if (WSTOPSIG(status) == SIGSTOP) {
-        if (ctx->stop_info.si_pid == getpid())
-            return WR_STOPPED; /* [2] */
-    }
-    
-    /* [3] */
-    if (WSTOPSIG(status) == SIGSTOP || WSTOPSIG(status) == SIGTSTP || 
-        WSTOPSIG(status) == SIGTTIN || WSTOPSIG(status) == SIGTTOU) {
-        return WR_DETACHED;
-    }
-
-    return WR_STOPPED; /* [1] */
+        
+    return WR_STOPPED;
 }
 
 
@@ -292,16 +292,12 @@ discard_wait(ptrace_context *ctx)
         switch (wres) {
             case WR_NOTHING:
             case WR_FINISHED:
-            case WR_DETACHED:
+            case WR_NEED_DETACH:
                 return wres;
 
             case WR_STOPPED:
-                if (ctx->stop_info.si_pid == getpid())
-                    ptrace(PTRACE_CONT, ctx->pid, 0, 0);
-                else {
-                    print_message("Reflecting signal %d (%s)", ctx->stop_info.si_signo, strsignal(ctx->stop_info.si_signo));
-                    ptrace(PTRACE_CONT, ctx->pid, 0, ctx->stop_info.si_signo);
-                }
+                ptrace_verbose(PTRACE_CONT, ctx->pid, 0, 
+                    ctx->stop_signal == SIGSTOP ? 0 : ctx->stop_signal);
                 break;
         }
     }
@@ -322,11 +318,11 @@ parse_args(program_params *params, int argc, char **argv)
             {"print-symbols", no_argument,       0,   JUST_PRINT_SYMBOLS },
             {"max-depth",     required_argument, 0,  'm' },
             {"realtime",      no_argument,       0,  'r' },
-            {"min-cost",      required_argument, 0,  'c' },
+            {"threshold",     required_argument, 0,  't' },
             {"dump",          required_argument, 0,  'd' }
         };
 
-        c = getopt_long(argc, argv, "m:rc:d:f:h", long_opts, NULL);
+        c = getopt_long(argc, argv, "m:rt:d:f:h", long_opts, NULL);
         if (c == -1) {
             argc -= optind;
             argv += optind;
@@ -334,7 +330,7 @@ parse_args(program_params *params, int argc, char **argv)
         }
 
         switch(c) {
-            case 'c':
+            case 't':
                 params->vprops.min_cost = atoi(optarg);
                 break;
             case 'd':
@@ -468,7 +464,7 @@ read_symbols(pid_t pid, std::vector<fn_descr> *funcs)
         }
         maps_free(minf);
     }
-
+    free(exe);
     maps_close(mctx);
 
     // remove duplicates/overlapped functions
@@ -489,8 +485,16 @@ print_symbols(const std::vector<fn_descr> &fns)
 static void 
 usage()
 {
-    fprintf(stderr, "Usage: %s [-m|--max-depth N] [-h] pid\n", g_progname);
-    fprintf(stderr, "\t-h|--help: show this help\n"
-                    "\t-m|--max-depth N: unwind no more than N frames\n\n");
+    fprintf(stderr, "Usage: %s [options] pid\n", g_progname);
+    fprintf(stderr, "Options are:\n");
+    fprintf(stderr, "\t-t|--threshold N:  visualize nodes that takes at least N%% of time (default: %d)\n", DEFAULT_MINCOST);
+    fprintf(stderr, "\t-d|--dump FILE:    save callgrind dump to given FILE\n");
+    fprintf(stderr, "\t-f|--freq FREQ:    set profile frequency to FREQ Hz (default: %d)\n", DEFAULT_FREQ);
+    fprintf(stderr, "\t-m|--max-depth N:  show at most N levels while visualizing (default: no limit)\n");
+    fprintf(stderr, "\t-r|--realtime:     use realtime profile instead of CPU\n");
+    fprintf(stderr, "\t-h|--help:         show this help\n\n");
+
+    fprintf(stderr, "\t--full-stack:      print full stack while visualizing (see manual)\n");
+    fprintf(stderr, "\t--print-symbols:   just print funcs and addrs (and quit)\n\n");
     exit(EX_USAGE);
 }
