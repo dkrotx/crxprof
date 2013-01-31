@@ -14,10 +14,10 @@ AC_PROG_CC
 AM_PROG_CC_C_O
 
 # Checks for libraries.
-AC_CHECK_LIB([bfd], [bfd_openr], [], AC_MSG_ERROR([Could  not find bfd library: binutils-dev]), [-liberty -lz])
-AC_CHECK_LIB([iberty], [cplus_demangle], [], AC_MSG_ERROR([Could  not find iberty library: binutils-dev]))
-AC_CHECK_LIB([rt], [clock_gettime], [], AC_MSG_ERROR([Could  not find rt library: system]))
-AC_CHECK_LIB([z], [inflate], [], AC_MSG_ERROR([Could  not find z library: system]))
+AC_CHECK_LIB([z], [inflate], [], AC_MSG_ERROR([Could not find z library: libz-dev]))
+AC_CHECK_LIB([iberty], [cplus_demangle], [], AC_MSG_ERROR([Could not find iberty library: binutils-dev]))
+AC_CHECK_LIB([bfd], [bfd_openr], [], AC_MSG_ERROR([Could not find bfd library: binutils-dev]), [-liberty -lz])
+AC_CHECK_LIB([rt], [clock_gettime], [], AC_MSG_ERROR([Could not find rt library: system]))
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h inttypes.h stdint.h stdlib.h string.h sys/time.h unistd.h sys/ptrace.h demangle.h assert.h endian.h])
