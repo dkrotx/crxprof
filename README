@@ -3,4 +3,14 @@ crxprof
 
 cripple runtume profiler
 
-See http://dkrotx-prg.blogspot.ru/2012/12/crxprof-handy-profiler.html for details.
+For details, see 
+[EN] http://dkrotx-prg.blogspot.ru/2012/12/crxprof-handy-profiler.html
+[RU] http://habrahabr.ru/topic/167837/
+
+
+INSTALLATION
+============
+autoreconf -fiv
+./configure
+make
+sudo make install
