@@ -25,7 +25,7 @@ static uint64_t count_calls(const calltree_node *node)
 static void show_layer(const vproperties &vprops, calltree_node *node, 
                        uint64_t total_cost, int depth = 0, bool is_last = false)
 {
-  int percent_full = (long long)(node->nintermediate + node->nself) * 100 / total_cost;
+  double percent_full = (double)(node->nintermediate + node->nself) * 100.0 / total_cost;
   
   if (percent_full >= vprops.min_cost) 
   {
@@ -41,9 +41,9 @@ static void show_layer(const vproperties &vprops, calltree_node *node,
         }
       }
 
-      int percent_self = node->nself * 100 / total_cost;
+      double percent_self = (double)node->nself * 100.0 / total_cost;
       
-      printf("%.60s (%d%% | %d%% self)\n", node->pfn->name, percent_full, percent_self);
+      printf("%.60s (%.1f%% | %.1f%% self)\n", node->pfn->name, percent_full, percent_self);
       std::sort(node->childs.begin(), node->childs.end(), nodes_weight_cmp());
 
       int n = node->childs.size();

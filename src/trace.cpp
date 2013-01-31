@@ -27,7 +27,7 @@ struct addr_comparator
 
 
 static const fn_descr *
-lookup_fn_descr(long ip, const std::vector<fn_descr> &funcs)
+lookup_fn_descr(unsigned long ip, const std::vector<fn_descr> &funcs)
 {
     int l = 0, h = funcs.size();
     while(l < h) {
@@ -73,7 +73,7 @@ get_cputime_ns(struct ptrace_context *ctx)
 
     if (clock_gettime(ctx->clock_id, &ts) == -1) 
         return -1;
-    return (ts.tv_sec * 1000000000 + ts.tv_nsec);
+    return ((uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec);
 }
 
 bool

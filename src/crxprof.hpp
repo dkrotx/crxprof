@@ -6,13 +6,13 @@
 #include <stdint.h>
 #include <vector>
 
-#define DEFAULT_MINCOST         5 /* % */
+#define DEFAULT_MINCOST         5.0 /* % */
 #define DEFAULT_FREQ            100
 #define MAX_STACK_DEPTH         128
 
 struct fn_descr {
     char *name;
-    long addr;
+    unsigned long addr;
     unsigned len;
 };
 
@@ -53,7 +53,7 @@ struct ptrace_context {
 
 struct vproperties {
     unsigned max_depth;
-    int  min_cost;
+    double min_cost;
     bool print_fullstack;
 
     vproperties() : max_depth(-1U), min_cost(DEFAULT_MINCOST), print_fullstack(false)  {}

@@ -331,7 +331,7 @@ parse_args(program_params *params, int argc, char **argv)
 
         switch(c) {
             case 't':
-                params->vprops.min_cost = atoi(optarg);
+                params->vprops.min_cost = atof(optarg);
                 break;
             case 'd':
                 params->dumpfile = optarg;
@@ -487,7 +487,7 @@ usage()
 {
     fprintf(stderr, "Usage: %s [options] pid\n", g_progname);
     fprintf(stderr, "Options are:\n");
-    fprintf(stderr, "\t-t|--threshold N:  visualize nodes that takes at least N%% of time (default: %d)\n", DEFAULT_MINCOST);
+    fprintf(stderr, "\t-t|--threshold N:  visualize nodes that takes at least N%% of time (default: %.1f)\n", DEFAULT_MINCOST);
     fprintf(stderr, "\t-d|--dump FILE:    save callgrind dump to given FILE\n");
     fprintf(stderr, "\t-f|--freq FREQ:    set profile frequency to FREQ Hz (default: %d)\n", DEFAULT_FREQ);
     fprintf(stderr, "\t-m|--max-depth N:  show at most N levels while visualizing (default: no limit)\n");

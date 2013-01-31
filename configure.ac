@@ -34,6 +34,10 @@ AC_CHECK_FUNCS([clock_getcpuclockid clock_gettime gettimeofday memchr memset str
 
 ACX_WITH_LIBUNWIND
 ARCH_TAG=`uname -m`
+case $ARCH_TAG in
+       @<:@iI@:>@?86) ARCH_TAG=x86 ;;
+       @<:@xX@:>@86@<:@-_@:>@64) ARCH_TAG=x86_64 ;;
+esac
 AC_SUBST(ARCH_TAG)
 
 AC_CONFIG_FILES([Makefile])
