@@ -12,7 +12,7 @@ AC_DEFUN([ACX_WITH_LIBUNWIND], [
 
   AC_LANG_SAVE
   AC_LANG_C
-  AC_CHECK_HEADER([libunwind.h], [], [AC_MSG_ERROR([Unable to compile with the libunwind.])])
-  AC_CHECK_LIB([unwind], [_U_dyn_register], [], [AC_MSG_ERROR(["Unable to link with libunwind])])
+  AC_CHECK_HEADER([libunwind.h], [], [AC_MSG_ERROR([Unable to compile with the libunwind, install libunwind-dev or use --with-libunwind=path.])])
+  AC_CHECK_LIB([unwind], [_U_dyn_register], [], [AC_MSG_ERROR(["Unable to link with libunwind, install libunwind or use --with-libunwind=path])])
   AC_LANG_RESTORE
 ])

@@ -8,6 +8,7 @@ crxprof
 test/a.out
 
 # GNU Autoconf and Automake
+INSTALL
 Makefile.in
 Makefile
 aclocal.m4
