@@ -8,9 +8,11 @@ For details, see
 [RU] http://habrahabr.ru/topic/167837/
 
 
+
 INSTALLATION
 ============
-autoreconf -fiv
+
+autoreconf -fiv # unless you have configure
 ./configure
 make
 sudo make install

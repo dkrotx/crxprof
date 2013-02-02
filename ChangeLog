@@ -1,2 +1,8 @@
+v0.2 [02.02.2013]
+ - Fixed compiling for x86
+ - Doesn't require g++ to compile
+ - manpage
+ - no memleaks (thank God, it's Valgrind)
+
 v0.1 [12.12.2012]
  - Ready to use. But still not ready for end user (man, detailed usage).

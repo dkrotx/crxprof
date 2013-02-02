@@ -22,6 +22,7 @@ configure
 .deps
 .dirstamp
 stamp-h1
+crxprof-*.tar.gz
 
 
 
