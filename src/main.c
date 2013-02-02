@@ -1,6 +1,5 @@
-/*
- * main.cpp
- *
+/**
+ * main.c
  * Entry point of crxprof. Parse arguments and collect symbols of given process (ID).
  */
 
@@ -24,14 +23,8 @@
 #include <getopt.h>
 #include <err.h>
 
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <algorithm>
+#include "crxprof.h"
 
-
-#include "crxprof.hpp"
-#include "symbols.h"
 
 struct timeval tv_last_sigint = {0, 0};
 static volatile bool sigint_caught = false;
@@ -41,37 +34,33 @@ static volatile bool sigint_caught_twice = false;
 static char *g_progname;
 
 void
-on_sigint(int)
-{
+on_sigint(int sig) {
     struct timeval tv, tv_diff;
     gettimeofday(&tv, NULL);
 
     sigint_caught  = true;
    
     timersub(&tv, &tv_last_sigint, &tv_diff);
-    if (!tv_diff.tv_sec && tv_diff.tv_usec < 333000)
+    if (!tv_diff.tv_sec && tv_diff.tv_usec < 500000)
         sigint_caught_twice = true;
 
     tv_last_sigint = tv;
 }
 
 void
-on_sigalarm(int)
-{
+on_sigalarm(int sig) {
     timer_alarmed = true;
 }
 
 void
-on_sigchld(int)
-{
+on_sigchld(int sig) {
     /* just for hang up */
 }
 
 
-
 #define FREQ_2PERIOD_USEC(n) ( 1000000 / (n) )
 
-struct program_params
+typedef struct 
 {
     unsigned us_sleep;
     int pid;
@@ -79,56 +68,42 @@ struct program_params
     const char *dumpfile;
     crxprof_method prof_method;
     bool just_print_symbols;
-
-    program_params() : us_sleep(FREQ_2PERIOD_USEC(DEFAULT_FREQ)), 
-                       dumpfile(NULL), prof_method(PROF_CPUTIME),
-                       just_print_symbols(false) {}
-};
+} program_params;
 
 
 typedef enum { WR_NOTHING, WR_FINISHED, WR_NEED_DETACH, WR_STOPPED } waitres_t;
 static waitres_t do_wait(ptrace_context *ctx, bool blocked);
 static waitres_t discard_wait(ptrace_context *ctx);
 
-static void dump_profile(const std::vector<fn_descr> &funcs, calltree_node *root, const char *filename);
-static void read_symbols(pid_t pid, std::vector<fn_descr> *funcs);
-static void print_symbols(const std::vector<fn_descr> &fns);
+static void dump_profile(calltree_node *root, const char *filename);
+static void print_symbols();
 static bool parse_args(program_params *params, int argc, char **argv);
 static long ptrace_verbose(enum __ptrace_request request, pid_t pid,
                    void *addr, intptr_t data);
 static void usage();
 
-/* Use -liberty for demangling.
- * Most distribustions doestn't provide demangle.h
- */
-#define DMGL_AUTO        (1 << 8)
-#define AUTO_DEMANGLING DMGL_AUTO
-extern "C" 
-{
-  extern char *cplus_demangle (const char *mangled, int options);
-}
 
 int
 main(int argc, char *argv[])
 {
     bool need_exit = false;
-    std::vector<fn_descr> funcs;
     ptrace_context ptrace_ctx;
     program_params params;
     struct itimerval itv;
+    calltree_node *root = NULL;
 
     g_progname = argv[0];
     if (!parse_args(&params, argc, argv))
         usage();
 
     print_message("Reading symbols (list of function)");
-    read_symbols(params.pid, &funcs);
+    init_fndescr(params.pid);
     if (params.just_print_symbols) {
-        print_symbols(funcs);
+        print_symbols();
+        free_fndescr();
         exit(0);
     }
 
-    calltree_node *root = NULL;
 
     print_message("Attaching to process: %d", params.pid);
     memset(&ptrace_ctx, 0, sizeof(ptrace_ctx));
@@ -170,7 +145,7 @@ main(int argc, char *argv[])
             bool need_prof = (params.prof_method == PROF_REALTIME);
 
             if (params.prof_method == PROF_CPUTIME) {
-                char st = get_procstate(ptrace_ctx);
+                char st = get_procstate(&ptrace_ctx);
                 if (st == 'R')
                     need_prof = true;
             }
@@ -189,7 +164,7 @@ main(int argc, char *argv[])
                         err(1, "ptrace(PTRACE_CONT) failed");
 
                     ptrace_ctx.nsnaps++;
-                    if (fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, ptrace_ctx.stk, funcs, &root))
+                    if (fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, &ptrace_ctx.stk, &root))
                         ptrace_ctx.nsnaps_accounted++;
                 }
             }
@@ -209,9 +184,9 @@ main(int argc, char *argv[])
                 print_message("%" PRIu64 " snapshot interrputs got (%" PRIu64 " dropped)", 
                     ptrace_ctx.nsnaps, ptrace_ctx.nsnaps - ptrace_ctx.nsnaps_accounted);
 
-                visualize_profile(root, params.vprops);
+                visualize_profile(root, &params.vprops);
                 if (params.dumpfile)
-                    dump_profile(funcs, root, params.dumpfile);
+                    dump_profile(root, params.dumpfile);
             } else
                 print_message("No symbolic snapshot caught yet!");
     
@@ -225,6 +200,11 @@ main(int argc, char *argv[])
             need_exit = true;
         }
     }
+
+    free_fndescr();
+    trace_free(&ptrace_ctx);
+    if (root)
+        calltree_destroy(root);
 
     return 0;
 }
@@ -307,6 +287,16 @@ discard_wait(ptrace_context *ctx)
 static bool
 parse_args(program_params *params, int argc, char **argv)
 {
+    params->us_sleep = FREQ_2PERIOD_USEC(DEFAULT_FREQ);
+    params->dumpfile = NULL;
+    params->prof_method = PROF_CPUTIME;
+    params->just_print_symbols = false;
+
+    params->vprops.max_depth = -1U;
+    params->vprops.min_cost  = DEFAULT_MINCOST;
+    params->vprops.print_fullstack = false;
+
+
     while(1) {
         int c;
         enum { PRINT_FULL_STACK = 256, JUST_PRINT_SYMBOLS };
@@ -366,119 +356,25 @@ parse_args(program_params *params, int argc, char **argv)
 
 
 static void 
-dump_profile(const std::vector<fn_descr> &funcs, calltree_node *root, 
-             const char *filename)
+dump_profile(calltree_node *root, const char *filename)
 {
-    std::ofstream of(filename);
-    dump_callgrind(funcs, root, of); 
+    FILE *ofile;
+
+    ofile = fopen(filename, "w");
+    if (!ofile)
+        err(1, "Failed to open file %s", filename);
+
+    dump_callgrind(root, ofile); 
     print_message("Profile saved to %s (Callgrind format)", filename);
 }
 
-// Select shortest name if any aliases
-struct fdescr_comparator
-{
-    bool operator()(const fn_descr &a, const fn_descr &b) const {
-        return (a.addr == b.addr) ? 
-                ( (a.len == b.len) ? strlen(a.name) < strlen(b.name) : a.len < b.len )
-               : a.addr < b.addr;
-    }
-};
-
-
-struct fdescr_addr_cmp
-{
-    bool operator()(const fn_descr &a, const fn_descr &b) const {
-        return (a.addr == b.addr);
-    }
-};
-
-static void 
-read_symbols(pid_t pid, std::vector<fn_descr> *funcs)
-{
-    struct maps_ctx *mctx;
-    struct maps_info *minf;
-    char *exe;
-
-    exe = proc_get_exefilename(pid);
-    if (!exe)
-        err(1, "Failed to get path of %d", pid);
-
-    elfreader_init();
-    mctx = maps_fopen(pid);
-    if (!mctx)
-        err(1, "Failed to open maps file of PID %d", int(pid));
-    
-    while ((minf = maps_readnext(mctx)) != NULL) {
-        if ((minf->prot & PROT_EXEC) && minf->pathname[0] == '/') {
-            elf_reader_t *er;
-
-            if (!strcmp(minf->pathname, exe)) {
-                print_message("reading symbols from %s (exe)", minf->pathname);
-                // [1] read text table
-                er = elf_read_textf(minf->pathname);
-
-                if (!er)
-                    err(1, "Failed to read text data from %s", minf->pathname);
-
-                for (int i = 0; i < er->nsymbols; i++) {
-                    const elf_symbol_t &es = er->symbols[i];
-                    if (es.symbol_class == 'T') {
-                        fn_descr descr;
-
-                        descr.name = strdup(cplus_demangle(es.symbol_name, AUTO_DEMANGLING) ?: es.symbol_name);
-                        descr.addr = (long)es.symbol_value;
-                        descr.len  = es.symbol_size;
-
-                        funcs->push_back(descr);
-                    }
-                }
-                elfreader_close(er);
-            }
-            else {
-                // [2] read dynamic table
-                off_t load_offset = minf->offset;
-                off_t load_end = minf->offset + ((char *)minf->end_addr - (char *)minf->start_addr);
-                er = elf_read_dynaf(minf->pathname);
-
-                print_message("reading symbols from %s (dynlib)", minf->pathname);
-
-                if (!er)
-                    err(1, "Failed to read dynamic data from %s", minf->pathname);
-
-                for (int i = 0; i < er->nsymbols; i++) {
-                    const elf_symbol &es = er->symbols[i];
-                    if ((es.symbol_class == 'T' || es.symbol_class == 'W') && 
-                        (off_t)es.symbol_value >= load_offset && (off_t)es.symbol_value < load_end) 
-                    {
-                        fn_descr descr;
-
-                        descr.name = strdup(cplus_demangle(es.symbol_name, AUTO_DEMANGLING) ?: es.symbol_name);
-                        descr.addr = (long)((off_t)es.symbol_value - load_offset + (char *)minf->start_addr);
-                        descr.len  = es.symbol_size;
-
-                        funcs->push_back(descr);
-                    }
-                }
-                elfreader_close(er);
-            }
-        }
-        maps_free(minf);
-    }
-    free(exe);
-    maps_close(mctx);
-
-    // remove duplicates/overlapped functions
-    std::sort(funcs->begin(), funcs->end(), fdescr_comparator());
-    std::vector<fn_descr>::iterator it = std::unique(funcs->begin(), funcs->end(), fdescr_addr_cmp());
-    funcs->erase(it, funcs->end());
-
-}
 
 static void
-print_symbols(const std::vector<fn_descr> &fns)
-{
-    for(std::vector<fn_descr>::const_iterator it = fns.begin(); it != fns.end(); ++it) {
-        printf("%p\t%d\t%s\n", (void *)it->addr, it->len, it->name);
+print_symbols() {
+    int i;
+    for(i = 0; i < g_nfndescr; i++) {
+        printf("%p\t%d\t%s\n", (void *)g_fndescr[i].addr, 
+               g_fndescr[i].len, g_fndescr[i].name);
     }
 }
 

@@ -12,7 +12,7 @@ void sleeping_fn(int us) {
 
 #define CALC_NOTHING(how_much) do {            \
     int i, j, sum = 0;                         \
-    for (i = 0; i < (how_much) * 10000; i++)   \
+    for (i = 0; i < (how_much) * 40000; i++)   \
         for (j = 1; j < 1000; j++)             \
             sum += ( i * j ) | ( i / j );      \
     } while(0)

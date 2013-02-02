@@ -49,7 +49,8 @@ maps_fopen(pid_t pid)
 }
 
 
-struct maps_info* maps_readnext(struct maps_ctx *ctx)
+struct maps_info*
+maps_readnext(struct maps_ctx *ctx)
 {
     int nconsumed = 0;
     ssize_t n;
@@ -125,6 +126,8 @@ maps_close(struct maps_ctx *ctx)
         fclose(ctx->procfile);
         ctx->procfile = NULL;
     }
+
+    free(ctx);
 }
 
 

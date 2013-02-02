@@ -9,7 +9,6 @@ AM_INIT_AUTOMAKE([1.9.6 no-define])
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
-AC_PROG_CXX
 AC_PROG_CC
 AM_PROG_CC_C_O
 
@@ -24,6 +23,13 @@ AC_CHECK_HEADERS([fcntl.h inttypes.h stdint.h stdlib.h string.h sys/time.h unist
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
+AH_BOTTOM([#if HAVE_STDBOOL_H
+#include <stdbool.h>
+#else
+#define bool char
+#define false 0
+#define true 1
+#endif ])
 AC_CHECK_TYPES([off_t, pid_t, size_t, ssize_t, uint64_t])
 
 # Checks for library functions.
