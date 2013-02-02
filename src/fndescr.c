@@ -12,13 +12,13 @@
 fn_descr *g_fndescr = NULL;
 int g_nfndescr = 0;
 
-/* Select shortest name if any aliases */
+/* Order by addr ASC selecting shortest name if any aliases */
 static int
 fdescr_cmp(const fn_descr *a, const fn_descr *b)
 {
     return (a->addr == b->addr)
-           ? ( a->len == b->len ? strlen(a->name) - strlen(b->name) : a->len - b->len )
-           : a->addr - b->addr;
+           ? ( a->len == b->len ? strlen(a->name) - strlen(b->name) : (int)a->len - (int)b->len )
+           : ( a->addr < b->addr ? -1 : 1 );
 }
 
 
