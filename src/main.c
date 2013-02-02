@@ -117,8 +117,11 @@ main(int argc, char *argv[])
 
     ptrace_ctx.prev_cputime = get_cputime_ns(&ptrace_ctx);
     signal(SIGCHLD, on_sigchld);
-    if (ptrace(PTRACE_ATTACH, params.pid, 0, 0) == -1)
-        err(1, "ptrace(PTRACE_ATTACH) failed");
+    if (ptrace(PTRACE_ATTACH, params.pid, 0, 0) == -1) {
+        warn("ptrace(PTRACE_ATTACH) failed");
+        printf("You have to see NOTES section of `man crxprof' for workarounds.\n");
+        exit(1);
+    }
 
     if (do_wait(&ptrace_ctx, true) != WR_STOPPED)
         err(1, "Error occured while stopping the process");

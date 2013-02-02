@@ -1,0 +1,121 @@
+'\" t
+.\"     Title: CRXPROF
+.\"    Author: [see the "Author" section]
+.\" Generator: vim
+.\"      Date: 02/02/2013
+.\"    Manual: Release 0.7
+.\"    Source: Release 0.7
+.\"  Language: English
+.\"
+.TH "CRXPROF" "1" "02/02/2013" "Release 0.7" "Release 0.7"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+crxprof \- a tool for profiling launched processes
+.SH "SYNOPSIS"
+.HP \w'\fBcrxprof\fR\ 'u
+\fBcrxprof\fR [\fIoptions\fR] \fIpid\fR
+.PP
+\fBcrxprof\fR \-\-print-symbols \fIpid\fR
+.SH "DESCRIPTION"
+.PP
+\fBCrxprof\fR
+is a tool for profiling \fIalready launched\fR processes\&. It collects profiling information doing samples, visualize it to console and (optionally) dump callgraph in Callgrind format\&. You may further use kcachegrind to observe it\&.
+.PP
+Interactive usage is straightforward:
+.PP
+.RS 4
+- press ^C to print current profile-data\&.
+.RE
+.RS 4
+- or press ^C^C to exit\&.
+.RE
+.PP
+This manual covers only options\&. No any descriptions of "how it works"\&. You may find them in web if you want:
+.RS 4
+.PP
+- http://dkrotx-prg.blogspot.ru/2012/12/crxprof-handy-profiler.html [English]\fR
+.RE
+.RS 4
+- http://habrahabr.ru/topic/167837/ [Russian]
+.RE
+.SH "OPTIONS"
+.PP
+\fB\-d \-\-dump=<path/to/file>\fR
+.RS 4
+Along with console visualization, save callgraph to file\&. You can use kcachegrind to watch nice graphical representation.
+.RE
+.PP
+\fB\-t \-\-threshold=<number>\fR
+.RS 4
+When printing data to console, visualize only nodes, which used at least N percent of CPU-time\&. It deals only with console-printing, dump to file (
+\fB\-d\fR
+) will always dump all data\&.
+.RE
+.PP
+\fB\-f \-\-freq=<number>\fR
+.RS 4
+Collect N profiling samples per second\&. Default value is 100. Usually, there is no reason to enlarge this value since all the principle of samping profiling is probabilistic\&.
+.RE
+.PP
+\fB\-m \-\-max\-depth=<number>\fR
+.RS 4
+Show at most N levels while visualizing to console\&. It deals only with console-printing, dump to file (
+\fB\-d\fR
+) will always dump all data\&.
+.RE
+.PP
+\fB\-r \-\-realtime\fR
+.RS 4
+Use realtime clock instead of CPU\&. The difference is simple: CPU clock enlarge ticks only when process is doing something\&. Because usually you don't interest on how much it spent while sleep()ing or read()ing on blocked file descriptor\&. So, use this option if you have such interest\&.
+.RE
+.PP
+\fB\-\-fullstack\fR
+.RS 4
+When priting to console, usually it's better to skip root nodes, which don't consume CPU-time by themselves\&. In most of C/C++ code there are functions libc_start_main() and main(), which just initiate some "really heavy" code\&.
+.PP
+This option deals only with console-printing, dump to file (
+\fB\-d\fR
+) will always dump all data\&.
+.RE
+.PP
+\fB\-\-print-symbols\fR
+.RS 4
+Print symbols and their virtual addrs, then exit\&. This option mostly interesting for debug stuff\&.
+.RE
+.PP
+\fB-h \-\-help\fR
+.RS 4
+Print usage and short notes about options\&.
+.SH "NOTES"
+.PP
+If you see message about what "ptrace(PTRACE_ATTACH) failed" and you the owner of tracee process, it may be caused by ptrace restriction\&.
+.PP
+You can temporarily disable this restriction (and revert to the old behaviour allowing your user to ptrace (gdb) any of their other processes) by doing:
+.PP
+.RS 2
+$ echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+.RE
+.SH "SEE ALSO"
+.PP
+ptrace(2), clock_getcpuclockid(3), strace(1), http://askubuntu.com/questions/41629/after-upgrade-gdb-wont-attach-to-process
+.SH "AUTHOR"
+.PP
+Kisel Jan <jdkrot@gmail\&.com>
