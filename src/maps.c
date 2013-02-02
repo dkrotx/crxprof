@@ -3,6 +3,11 @@
  *
  * Parse data from /proc/pid/maps
  */
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <limits.h>
 #include <assert.h>
 #include <string.h>

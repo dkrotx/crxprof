@@ -1,10 +1,6 @@
 #ifndef CRXPROF_H__
 #define CRXPROF_H__
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
 #include <libunwind.h>
 #include <stdint.h>
 #include <stdio.h>

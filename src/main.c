@@ -5,6 +5,10 @@
 
 #define __STDC_FORMAT_MACROS
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/times.h>
