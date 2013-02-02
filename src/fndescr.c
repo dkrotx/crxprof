@@ -4,6 +4,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
 #include "crxprof.h"
 #include "symbols.h"
 #include "liberty_stub.h"

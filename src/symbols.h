@@ -1,6 +1,10 @@
 #ifndef CRXPROF_SYMBOLS_H__
 #define CRXPROF_SYMBOLS_H__
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <stdio.h>

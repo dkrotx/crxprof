@@ -9,7 +9,23 @@ AM_INIT_AUTOMAKE([1.9.6 no-define])
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
+
+dnl If CFLAGS isn't defined and using gcc, set CFLAGS to something reasonable.
+dnl Otherwise, just prevent autoconf from molesting CFLAGS.
+CFLAGS=$CFLAGS
 AC_PROG_CC
+if test "x$CFLAGS" = "x" ; then
+    no_CFLAGS="yes"
+fi
+
+if test "x$no_CFLAGS" = "xyes" -a "x$GCC" = "xyes" ; then
+    CFLAGS="-Wall -g -O2"
+fi
+dnl Append EXTRA_CFLAGS to CFLAGS, if defined.
+if test "x$EXTRA_CFLAGS" != "x" ; then
+    CFLAGS="$CFLAGS $EXTRA_CFLAGS"
+fi
+
 AM_PROG_CC_C_O
 
 # Checks for libraries.
