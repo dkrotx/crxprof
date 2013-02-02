@@ -11,4 +11,4 @@ crxprof_SOURCES = src/main.c src/fndescr.c \
                   src/utils.c \
                   src/liberty_stub.h src/symbols.h src/crxprof.h 
 
-crxprof_LDADD = -lunwind-ptrace -lunwind-@ARCH_TAG@ -lunwind -lbfd -lrt
+crxprof_LDADD = -lunwind-ptrace -lunwind-@ARCH_TAG@ -lunwind -lbfd -lrt -ldl
