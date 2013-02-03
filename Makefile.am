@@ -6,6 +6,7 @@ EXTRA_DIST = crxprof.1
 
 bin_PROGRAMS = crxprof
 crxprof_SOURCES = src/main.c src/fndescr.c \
+                  src/ptime.c src/ptime.h \
                   src/elf_read.c src/maps.c \
                   src/trace.c src/visualize.c src/callgrind_dump.c \
                   src/utils.c \

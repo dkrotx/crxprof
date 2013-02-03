@@ -29,8 +29,6 @@ typedef struct st_calltree_node {
 } calltree_node;
 
 
-typedef enum { PROF_REALTIME = 1, PROF_CPUTIME = 2, PROF_IOWAIT = 4 } crxprof_method;
-
 typedef struct {
     unw_word_t ips[MAX_STACK_DEPTH];
     int depth;
@@ -40,8 +38,6 @@ typedef struct {
     pid_t pid;
     unw_addr_space_t addr_space;
     void *unwind_rctx;
-    uint64_t prev_cputime;
-    clockid_t clock_id;
     int stop_signal;
 
     char procstat_path[sizeof("/proc/4000000000/stat")];
@@ -74,7 +70,6 @@ bool get_backtrace(ptrace_context *ctx);
 bool fill_backtrace(uint64_t cost, const trace_stack *stk, 
                     calltree_node **root);
 void calltree_destroy(calltree_node *root);
-uint64_t get_cputime_ns(ptrace_context *ctx);
 char get_procstate(const ptrace_context *ctx); /* One character from the string "RSDZTW" */
 
 /* visualize and dumps */

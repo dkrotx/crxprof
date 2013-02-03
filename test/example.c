@@ -19,7 +19,7 @@ void sleeping_fn(int us) {
 
 void fn() {
     CALC_NOTHING(1);
-    sleeping_fn(1500);
+    sleeping_fn(80000);
 }
 
 void heavy_fn() {

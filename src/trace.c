@@ -48,9 +48,6 @@ trace_init(pid_t pid, ptrace_context *ctx) {
     if (!ctx->unwind_rctx)
         return false;
 
-    if (clock_getcpuclockid(pid, &ctx->clock_id) != 0)
-        return false;
-
     sprintf(ctx->procstat_path, "/proc/%d/stat", pid);
     return true;
 }
@@ -62,13 +59,6 @@ trace_free(ptrace_context *ctx) {
     unw_destroy_addr_space(ctx->addr_space);
 }
 
-uint64_t
-get_cputime_ns(ptrace_context *ctx) {
-    struct timespec ts;
-    return (clock_gettime(ctx->clock_id, &ts) == -1) ?
-        -1 :
-        (uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
-}
 
 bool
 get_backtrace(ptrace_context *ctx) {

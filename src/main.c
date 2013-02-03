@@ -29,6 +29,7 @@
 #include <err.h>
 
 #include "crxprof.h"
+#include "ptime.h"
 
 
 struct timeval tv_last_sigint = {0, 0};
@@ -76,6 +77,7 @@ typedef struct
 } program_params;
 
 
+
 typedef enum { WR_NOTHING, WR_FINISHED, WR_NEED_DETACH, WR_STOPPED } waitres_t;
 static waitres_t do_wait(ptrace_context *ctx, bool blocked);
 static waitres_t discard_wait(ptrace_context *ctx);
@@ -86,6 +88,7 @@ static bool parse_args(program_params *params, int argc, char **argv);
 static long ptrace_verbose(enum __ptrace_request request, pid_t pid,
                    void *addr, intptr_t data);
 static void usage();
+static uint64_t get_process_time(const ptrace_context *ctx, uint64_t upper_ns, bool use_cpu_time);
 
 
 int
@@ -95,6 +98,7 @@ main(int argc, char *argv[])
     ptrace_context ptrace_ctx;
     program_params params;
     struct itimerval itv;
+    struct proc_timer proc_time;
     calltree_node *root = NULL;
 
     g_progname = argv[0];
@@ -109,18 +113,25 @@ main(int argc, char *argv[])
         exit(0);
     }
 
+    if (!reset_process_time(&proc_time, params.pid, params.prof_method)) {
+        free_fndescr();
+        errx(2, "Failed to retrieve process time");
+    }
+
 
     print_message("Attaching to process: %d", params.pid);
     memset(&ptrace_ctx, 0, sizeof(ptrace_ctx));
     if (!trace_init(params.pid, &ptrace_ctx))
         err(1, "Failed to initialize unwind internals");
 
-    ptrace_ctx.prev_cputime = get_cputime_ns(&ptrace_ctx);
     signal(SIGCHLD, on_sigchld);
     if (ptrace(PTRACE_ATTACH, params.pid, 0, 0) == -1) {
+        int saved_errno = errno;
         warn("ptrace(PTRACE_ATTACH) failed");
-        printf("You have to see NOTES section of `man crxprof' for workarounds.\n");
-        exit(1);
+        if (saved_errno == EPERM) {
+            printf("You have to see NOTES section of `man crxprof' for workarounds.\n");
+        }
+        exit(2);
     }
 
     if (do_wait(&ptrace_ctx, true) != WR_STOPPED)
@@ -143,13 +154,16 @@ main(int argc, char *argv[])
     print_message("Press ^C once to show profile, twice to quit");
     signal(SIGINT, on_sigint);
 
+    /* drop first meter since it contains our preparations */
+    (void)get_process_dt(&proc_time); 
+
     while(!need_exit)
     {
         waitres_t wres = WR_NOTHING;
         sleep(1);
         
         if (timer_alarmed) {
-            uint64_t cpu_time = get_cputime_ns(&ptrace_ctx);
+            uint64_t proc_dt = get_process_dt(&proc_time);
             bool need_prof = (params.prof_method == PROF_REALTIME);
 
             if (params.prof_method == PROF_CPUTIME) {
@@ -172,12 +186,10 @@ main(int argc, char *argv[])
                         err(1, "ptrace(PTRACE_CONT) failed");
 
                     ptrace_ctx.nsnaps++;
-                    if (fill_backtrace(cpu_time - ptrace_ctx.prev_cputime, &ptrace_ctx.stk, &root))
+                    if (fill_backtrace(proc_dt, &ptrace_ctx.stk, &root))
                         ptrace_ctx.nsnaps_accounted++;
                 }
             }
-
-            ptrace_ctx.prev_cputime = cpu_time;
         }
 
         if (wres != WR_FINISHED && wres != WR_NEED_DETACH) {
