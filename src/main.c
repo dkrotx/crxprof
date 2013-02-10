@@ -35,22 +35,12 @@
 struct timeval tv_last_sigint = {0, 0};
 static volatile bool sigint_caught = false;
 static volatile bool timer_alarmed = false;
-static volatile bool sigint_caught_twice = false;
 
 static char *g_progname;
 
 void
 on_sigint(int sig) {
-    struct timeval tv, tv_diff;
-    gettimeofday(&tv, NULL);
-
     sigint_caught  = true;
-   
-    timersub(&tv, &tv_last_sigint, &tv_diff);
-    if (!tv_diff.tv_sec && tv_diff.tv_usec < 500000)
-        sigint_caught_twice = true;
-
-    tv_last_sigint = tv;
 }
 
 void
@@ -88,7 +78,6 @@ static bool parse_args(program_params *params, int argc, char **argv);
 static long ptrace_verbose(enum __ptrace_request request, pid_t pid,
                    void *addr, intptr_t data);
 static void usage();
-static uint64_t get_process_time(const ptrace_context *ctx, uint64_t upper_ns, bool use_cpu_time);
 
 
 int
@@ -197,25 +186,41 @@ main(int argc, char *argv[])
         }
 
 
-        if (sigint_caught_twice) {
-            need_exit = true;
-        } else if (sigint_caught || wres == WR_FINISHED || wres == WR_NEED_DETACH) {
-            if (root) {
-                print_message("%" PRIu64 " snapshot interrputs got (%" PRIu64 " dropped)", 
-                    ptrace_ctx.nsnaps, ptrace_ctx.nsnaps - ptrace_ctx.nsnaps_accounted);
+        if (sigint_caught || wres == WR_FINISHED || wres == WR_NEED_DETACH) {
+            if (sigint_caught) {
+                /* Check whatever it's a double ^C^C wich means 'exit' */
+                struct timeval tv, tv_diff;
+                gettimeofday(&tv, NULL);
+       
+                timersub(&tv, &tv_last_sigint, &tv_diff);
+                tv_last_sigint = tv;
 
-                visualize_profile(root, &params.vprops);
-                if (params.dumpfile)
-                    dump_profile(root, params.dumpfile);
-            } else
-                print_message("No symbolic snapshot caught yet!");
-    
-            sigint_caught = false;
+                if (!tv_diff.tv_sec && tv_diff.tv_usec < 500000) {
+                    print_message("Exit since ^C pressed twice");
+                    need_exit = true;
+                }
+                sigint_caught = false;
+            }
+            if (!need_exit) {
+                if (root) {
+                    print_message("%" PRIu64 " snapshot interrputs got (%" PRIu64 " dropped)", 
+                        ptrace_ctx.nsnaps, ptrace_ctx.nsnaps - ptrace_ctx.nsnaps_accounted);
+
+                    visualize_profile(root, &params.vprops);
+                    if (params.dumpfile)
+                        dump_profile(root, params.dumpfile);
+                } else
+                    print_message("No symbolic snapshot caught yet!");
+            }
         }
 
         if (wres == WR_FINISHED || wres == WR_NEED_DETACH) {
-            if (wres == WR_NEED_DETACH)
+            if (wres == WR_NEED_DETACH) {
                 (void)ptrace_verbose(PTRACE_DETACH, params.pid, 0, ptrace_ctx.stop_signal);
+                print_message("Exit since program is stopped by (%d=%s)", ptrace_ctx.stop_signal, strsignal(ptrace_ctx.stop_signal));
+            }
+            else
+                print_message("Exit since traced program is finished");
 
             need_exit = true;
         }
@@ -235,10 +240,10 @@ ptrace_verbose(enum __ptrace_request request, pid_t pid,
                void *addr, intptr_t data)
 {
     if ((request == PTRACE_CONT || request == PTRACE_DETACH) && data != 0)
-        printf("Reflecting signal %d (%s)\n", (int)data, strsignal(data));
+        print_message("Reflecting signal %d (%s)", (int)data, strsignal(data));
 
     if (request == PTRACE_DETACH)
-        printf("Detach from process #%d\n", (int)pid);
+        print_message("Detach from process #%d", (int)pid);
 
     return ptrace(request, pid, addr, data);
 }
