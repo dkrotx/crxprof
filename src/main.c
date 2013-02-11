@@ -32,7 +32,7 @@
 #include "ptime.h"
 
 
-struct timeval tv_last_sigint = {0, 0};
+static struct timeval tv_last_sigint;
 static volatile bool sigint_caught = false;
 static volatile bool timer_alarmed = false;
 
@@ -106,6 +106,8 @@ main(int argc, char *argv[])
         free_fndescr();
         errx(2, "Failed to retrieve process time");
     }
+
+    timerclear(&tv_last_sigint);
 
 
     print_message("Attaching to process: %d", params.pid);
@@ -193,7 +195,7 @@ main(int argc, char *argv[])
                 gettimeofday(&tv, NULL);
        
                 timersub(&tv, &tv_last_sigint, &tv_diff);
-                tv_last_sigint = tv;
+                memcpy(&tv_last_sigint, &tv, sizeof(tv));
 
                 if (!tv_diff.tv_sec && tv_diff.tv_usec < 500000) {
                     print_message("Exit since ^C pressed twice");
