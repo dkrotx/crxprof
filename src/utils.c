@@ -34,36 +34,36 @@ print_message(const char *fmt, ...)
 void
 wait4keypress(bool *key_pressed)
 {
-    static fd_set fds;
-    static bool first_time = true;
+    *key_pressed = false;
 
-    if (first_time) {
+    if (isatty(STDIN_FILENO)) {
+        fd_set fds;
+
         FD_ZERO(&fds);
-        first_time = false;
-    }
-    
-    FD_SET(STDIN_FILENO, &fds);
-    if (select(STDIN_FILENO+1, &fds, NULL, NULL, NULL /* timeout = infinite */) == 1) {
-        static char buf[16];
-        ssize_t nr;
-        size_t  nb;
+        FD_SET(STDIN_FILENO, &fds);
 
-        assert( FD_ISSET(STDIN_FILENO, &fds) );
-        *key_pressed = true;
+        if (select(STDIN_FILENO+1, &fds, NULL, NULL, NULL /* timeout = infinite */) == 1) {
+            static char buf[16];
+            int nb;
 
-        if (ioctl(STDIN_FILENO, FIONREAD, &nb) == -1) {
-            warn("ioctl STDIN_FILENO failed");
-            return;
-        }
-    
-        /* simply discard all data */
-        while(nb) {
-            nr = read(STDIN_FILENO, buf, nb & (16-1));
-            if (nr <= 0)
+            assert( FD_ISSET(STDIN_FILENO, &fds) );
+            *key_pressed = true;
+
+            if (ioctl(STDIN_FILENO, FIONREAD, &nb) == -1) {
+                warn("ioctl STDIN_FILENO failed");
                 return;
-            nb -= nr;
-        }
-   }
+            }
 
-   *key_pressed = false;
+            /* simply discard all data */
+            while(nb) {
+                ssize_t nr = read(STDIN_FILENO, buf, nb > sizeof(buf) ? sizeof(buf) : nb);
+                if (nr <= 0)
+                    return;
+                nb -= nr;
+            }
+       }
+    }
+    else {
+        select(0, NULL, NULL, NULL, NULL); /* simply sleep if non-terminal */
+    }
 }

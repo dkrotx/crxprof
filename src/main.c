@@ -11,10 +11,8 @@
 
 #include <sys/types.h>
 #include <sys/time.h>
-#include <sys/times.h>
 #include <sys/wait.h>
 #include <sys/ptrace.h>
-#include <time.h>
 #include <inttypes.h>
 #include <signal.h>
 #include <errno.h>
@@ -190,12 +188,7 @@ main(int argc, char *argv[])
             wres = discard_wait(&ptrace_ctx);
         }
 
-
-        if (sigint_caught) {
-            print_message("Exit since ^C pressed");
-            need_exit = true;
-        }
-        else if (key_pressed || wres == WR_FINISHED || wres == WR_NEED_DETACH) {
+        if (sigint_caught || key_pressed || wres == WR_FINISHED || wres == WR_NEED_DETACH) {
             if (root) {
                 print_message("%" PRIu64 " snapshot interrputs got (%" PRIu64 " dropped)", 
                     ptrace_ctx.nsnaps, ptrace_ctx.nsnaps - ptrace_ctx.nsnaps_accounted);
@@ -205,6 +198,11 @@ main(int argc, char *argv[])
                     dump_profile(root, params.dumpfile);
             } else
                 print_message("No symbolic snapshot caught yet!");
+
+            if (sigint_caught) {
+                print_message("Exit since ^C pressed");
+                need_exit = true;
+            }
         }
 
         if (wres == WR_FINISHED || wres == WR_NEED_DETACH) {
