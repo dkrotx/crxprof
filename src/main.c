@@ -32,7 +32,6 @@
 #include "ptime.h"
 
 
-static struct timeval tv_last_sigint;
 static volatile bool sigint_caught = false;
 static volatile bool timer_alarmed = false;
 
@@ -71,6 +70,7 @@ typedef struct
 typedef enum { WR_NOTHING, WR_FINISHED, WR_NEED_DETACH, WR_STOPPED } waitres_t;
 static waitres_t do_wait(ptrace_context *ctx, bool blocked);
 static waitres_t discard_wait(ptrace_context *ctx);
+static void set_sigalrm();
 
 static void dump_profile(calltree_node *root, const char *filename);
 static void print_symbols();
@@ -102,12 +102,11 @@ main(int argc, char *argv[])
         exit(0);
     }
 
+
     if (!reset_process_time(&proc_time, params.pid, params.prof_method)) {
         free_fndescr();
         errx(2, "Failed to retrieve process time");
     }
-
-    timerclear(&tv_last_sigint);
 
 
     print_message("Attaching to process: %d", params.pid);
@@ -137,12 +136,12 @@ main(int argc, char *argv[])
     itv.it_interval.tv_usec = params.us_sleep;
     itv.it_value = itv.it_interval;
 
-    signal(SIGALRM, on_sigalarm);
+    set_sigalrm();
     if (setitimer(ITIMER_REAL, &itv, NULL) == -1)
         err(1, "setitimer failed");
 
     print_message("Starting profile (interval %dms)", params.us_sleep / 1000);
-    print_message("Press ^C once to show profile, twice to quit");
+    print_message("Press ENTER to show profile, ^C to quit");
     signal(SIGINT, on_sigint);
 
     /* drop first meter since it contains our preparations */
@@ -151,8 +150,10 @@ main(int argc, char *argv[])
     while(!need_exit)
     {
         waitres_t wres = WR_NOTHING;
-        sleep(1);
-        
+        bool key_pressed = false;
+
+        wait4keypress(&key_pressed);
+
         if (timer_alarmed) {
             uint64_t proc_dt = get_process_dt(&proc_time);
             bool need_prof = (params.prof_method == PROF_REALTIME);
@@ -181,6 +182,8 @@ main(int argc, char *argv[])
                         ptrace_ctx.nsnaps_accounted++;
                 }
             }
+
+            timer_alarmed = 0;
         }
 
         if (wres != WR_FINISHED && wres != WR_NEED_DETACH) {
@@ -188,32 +191,20 @@ main(int argc, char *argv[])
         }
 
 
-        if (sigint_caught || wres == WR_FINISHED || wres == WR_NEED_DETACH) {
-            if (sigint_caught) {
-                /* Check whatever it's a double ^C^C wich means 'exit' */
-                struct timeval tv, tv_diff;
-                gettimeofday(&tv, NULL);
-       
-                timersub(&tv, &tv_last_sigint, &tv_diff);
-                memcpy(&tv_last_sigint, &tv, sizeof(tv));
+        if (sigint_caught) {
+            print_message("Exit since ^C pressed");
+            need_exit = true;
+        }
+        else if (key_pressed || wres == WR_FINISHED || wres == WR_NEED_DETACH) {
+            if (root) {
+                print_message("%" PRIu64 " snapshot interrputs got (%" PRIu64 " dropped)", 
+                    ptrace_ctx.nsnaps, ptrace_ctx.nsnaps - ptrace_ctx.nsnaps_accounted);
 
-                if (!tv_diff.tv_sec && tv_diff.tv_usec < 500000) {
-                    print_message("Exit since ^C pressed twice");
-                    need_exit = true;
-                }
-                sigint_caught = false;
-            }
-            if (!need_exit) {
-                if (root) {
-                    print_message("%" PRIu64 " snapshot interrputs got (%" PRIu64 " dropped)", 
-                        ptrace_ctx.nsnaps, ptrace_ctx.nsnaps - ptrace_ctx.nsnaps_accounted);
-
-                    visualize_profile(root, &params.vprops);
-                    if (params.dumpfile)
-                        dump_profile(root, params.dumpfile);
-                } else
-                    print_message("No symbolic snapshot caught yet!");
-            }
+                visualize_profile(root, &params.vprops);
+                if (params.dumpfile)
+                    dump_profile(root, params.dumpfile);
+            } else
+                print_message("No symbolic snapshot caught yet!");
         }
 
         if (wres == WR_FINISHED || wres == WR_NEED_DETACH) {
@@ -234,6 +225,20 @@ main(int argc, char *argv[])
         calltree_destroy(root);
 
     return 0;
+}
+
+
+static void
+set_sigalrm()
+{
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = on_sigalarm;
+    sa.sa_flags   = SA_RESTART;
+
+    if (sigaction(SIGALRM, &sa, NULL) == -1)
+        err(1, "sigaction SIGALRM failed");
 }
 
 

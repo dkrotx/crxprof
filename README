@@ -3,16 +3,30 @@ crxprof
 
 cripple runtume profiler
 
-For details, see 
-[EN] http://dkrotx-prg.blogspot.ru/2012/12/crxprof-handy-profiler.html
-[RU] http://habrahabr.ru/post/167837/
 
+PREREQUISITE
+============
+Linux 2.6+, autoconf, automake, binutils-dev (including libbfd), libunwind-dev
+If you can't find libunwind-dev on your distro, it may be called libunwindX-dev, where X is version number.
+Use `apt-cache search` or alternative to guess proper name.
 
 
 INSTALLATION
 ============
+$ autoreconf -fiv
+$ ./configure
+$ make
+$ sudo make install
 
-autoreconf -fiv # unless you have configure
-./configure
-make
-sudo make install
+
+USAGE
+===========
+Basical usage is
+$ crxprof pid
+(and press ENTER to see profile, ^C to exit)
+
+Also, see `crxprof --help` or `man crxprof` for more options.
+
+For details and developers info, read
+[EN] http://dkrotx-prg.blogspot.ru/2012/12/crxprof-handy-profiler.html
+[RU] http://habrahabr.ru/post/167837/

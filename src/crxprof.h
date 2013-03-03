@@ -78,5 +78,7 @@ void dump_callgrind(calltree_node *root, FILE *ofile);
 
 
 void print_message(const char *fmt, ...) __attribute__((__format__(printf, 1, 2)));
+void wait4keypress(bool *key_pressed);
+
 
 #endif /* CRXPROF_H_*/

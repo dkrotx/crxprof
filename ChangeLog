@@ -1,3 +1,6 @@
+v0.3 [03.03.2013]
+ - Usage semantics changed: press ENTER to show profile, ^C (once) to exit
+
 v0.2 [02.02.2013]
  - Fixed compiling for x86
  - Doesn't require g++ to compile
