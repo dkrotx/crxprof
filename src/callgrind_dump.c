@@ -64,7 +64,9 @@ void
 dump_callgrind(calltree_node *root, FILE *ofile)
 {
   int i;
+
   call_summary summary;
+  summary.total_cost  = 0;
   summary.fns_usemask = calloc(1, g_nfndescr);
   assert(summary.fns_usemask);
 
