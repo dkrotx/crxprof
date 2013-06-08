@@ -41,6 +41,7 @@ typedef struct {
     int stop_signal;
 
     char procstat_path[sizeof("/proc/4000000000/stat")];
+    char *cmdline;
     trace_stack stk;
 
     uint64_t nsnaps;
@@ -74,7 +75,7 @@ char get_procstate(const ptrace_context *ctx); /* One character from the string 
 
 /* visualize and dumps */
 void visualize_profile(calltree_node *root, const vproperties *vprops);
-void dump_callgrind(calltree_node *root, FILE *ofile);
+void dump_callgrind(const ptrace_context *ctx, calltree_node *root, FILE *ofile);
 
 
 void print_message(const char *fmt, ...) __attribute__((__format__(printf, 1, 2)));

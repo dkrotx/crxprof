@@ -70,7 +70,7 @@ static waitres_t do_wait(ptrace_context *ctx, bool blocked);
 static waitres_t discard_wait(ptrace_context *ctx);
 static void set_sigalrm();
 
-static void dump_profile(calltree_node *root, const char *filename);
+static void dump_profile(const ptrace_context *pctx, calltree_node *root, const char *filename);
 static void print_symbols();
 static bool parse_args(program_params *params, int argc, char **argv);
 static long ptrace_verbose(enum __ptrace_request request, pid_t pid,
@@ -199,7 +199,7 @@ main(int argc, char *argv[])
 
                 visualize_profile(root, &params.vprops);
                 if (params.dumpfile)
-                    dump_profile(root, params.dumpfile);
+                    dump_profile(&ptrace_ctx, root, params.dumpfile);
             } else
                 print_message("No symbolic snapshot caught yet!");
         }
@@ -385,7 +385,7 @@ parse_args(program_params *params, int argc, char **argv)
 
 
 static void 
-dump_profile(calltree_node *root, const char *filename)
+dump_profile(const ptrace_context *pctx, calltree_node *root, const char *filename)
 {
     FILE *ofile;
 
@@ -393,7 +393,7 @@ dump_profile(calltree_node *root, const char *filename)
     if (!ofile)
         err(1, "Failed to open file %s", filename);
 
-    dump_callgrind(root, ofile); 
+    dump_callgrind(pctx, root, ofile); 
     print_message("Profile saved to %s (Callgrind format)", filename);
 }
 

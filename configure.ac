@@ -1,5 +1,5 @@
 AC_PREREQ([2.59])
-AC_INIT([crxprof], [0.2], [https://github.com/dkrotx/crxprof/])
+AC_INIT([crxprof], [0.3], [https://github.com/dkrotx/crxprof/])
 
 # This is where autoconf automatically generated files go
 AC_CONFIG_AUX_DIR([config])

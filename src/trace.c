@@ -35,10 +35,75 @@ lookup_fn_descr(unsigned long ip)
     return NULL;
 }
 
+static bool
+read_cmdline(pid_t pid, char **pcmdline) {
+    char path[sizeof("/proc/400000000000/cmdline")];
+    FILE *f;
+    char *p = NULL;
+    size_t bufsize = 0, nr = 0;
+
+    sprintf(path, "/proc/%d/cmdline", pid);
+    f = fopen(path, "r");
+    if (!f) {
+        return false;
+    }
+
+    while (!feof(f)) {
+        ssize_t n;
+        if (bufsize == nr) {
+            char *_p = (char *)realloc(p, bufsize += 128);
+            if (!_p)
+                goto badret;
+            p = _p;
+        }
+
+        if ((n = fread(p+nr, 1, bufsize-nr, f)) < 0) 
+            goto badret;
+
+        nr += n;
+    }
+
+    if (nr > 0) {
+        size_t i;
+        /* /proc/pid/cmdline contain '\0' as argument separator 
+         * And '\0' at the end unless truncated.
+         */
+        for (i = 0; i < nr-1; i++) {
+            if (p[i] == '\0')
+                p[i] = ' ';
+        }
+
+        if (p[i] != '\0') {
+            if (bufsize == nr) {
+                char *_p = (char *)realloc(p, ++bufsize);
+                if (!_p)
+                    goto badret;
+                p = _p;
+            }
+            p[i+1] = '\0';
+        }
+    }
+
+    fclose(f);
+    *pcmdline = p;
+    return true;
+
+badret:
+
+    fclose(f);
+    if (p)
+        free(p);
+
+    return false;
+}
 
 bool
 trace_init(pid_t pid, ptrace_context *ctx) {
     ctx->pid = pid;
+
+    if (!read_cmdline(pid, &ctx->cmdline))
+        return false;
+
     ctx->addr_space = unw_create_addr_space(&_UPT_accessors, __BYTE_ORDER);
     if (!ctx->addr_space)
         return false;
@@ -57,6 +122,7 @@ void
 trace_free(ptrace_context *ctx) {
     _UPT_destroy(ctx->unwind_rctx);
     unw_destroy_addr_space(ctx->addr_space);
+    free(ctx->cmdline);
 }
 
 

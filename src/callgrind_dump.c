@@ -61,7 +61,7 @@ print_costs(const call_summary *summary,
 
 
 void
-dump_callgrind(calltree_node *root, FILE *ofile)
+dump_callgrind(const ptrace_context *ctx, calltree_node *root, FILE *ofile)
 {
   int i;
 
@@ -71,6 +71,9 @@ dump_callgrind(calltree_node *root, FILE *ofile)
   assert(summary.fns_usemask);
 
   collect_summary(root, &summary);
+  fprintf(ofile, "cmd: %s\n", ctx->cmdline);
+  fprintf(ofile, "pid: %d\n", ctx->pid);
+  fprintf(ofile, "creator: %s-%s\n", PACKAGE_NAME, PACKAGE_VERSION);
   fprintf(ofile, "events: Instructions\n"
           "summary: %" PRIu64"\n\n\n", summary.total_cost);
   
