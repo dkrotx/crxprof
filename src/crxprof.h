@@ -80,6 +80,7 @@ void dump_callgrind(const ptrace_context *ctx, calltree_node *root, FILE *ofile)
 
 void print_message(const char *fmt, ...) __attribute__((__format__(printf, 1, 2)));
 void wait4keypress(bool *key_pressed);
+bool has_openvz(); /* OpenVZ detected */
 
 
 #endif /* CRXPROF_H_*/

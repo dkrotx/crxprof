@@ -81,6 +81,7 @@ static void usage();
 int
 main(int argc, char *argv[])
 {
+    int errc = 0;
     bool need_exit = false;
     ptrace_context ptrace_ctx;
     program_params params;
@@ -100,10 +101,14 @@ main(int argc, char *argv[])
         exit(0);
     }
 
+    if (params.prof_method == PROF_CPUTIME && has_openvz()) {
+        print_message("If you inside OpenVZ container, there may be a problems with retrieving 'process CPU-time'");
+        print_message("Profile process from OpenVZ-host (master) or use realtime profile instead (-r|--realtime)");
+    }
 
-    if (!reset_process_time(&proc_time, params.pid, params.prof_method)) {
+    if (!reset_process_time(&proc_time, params.pid, params.prof_method, &errc)) {
         free_fndescr();
-        errx(2, "Failed to retrieve process time");
+        errx(2, "Failed to retrieve process time: %s", strerror(errc));
     }
 
 

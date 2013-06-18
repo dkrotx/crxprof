@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/select.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <assert.h>
 #include <err.h>
 
@@ -66,4 +67,11 @@ wait4keypress(bool *key_pressed)
     else {
         select(0, NULL, NULL, NULL, NULL); /* simply sleep if non-terminal */
     }
+}
+
+bool
+has_openvz()
+{
+    struct stat st;
+    return stat("/proc/vz", &st) == 0;
 }

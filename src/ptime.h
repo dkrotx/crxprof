@@ -16,7 +16,7 @@ struct proc_timer
 };
 
 
-bool reset_process_time(struct proc_timer *pt, pid_t pid, crxprof_method method);
+bool reset_process_time(struct proc_timer *pt, pid_t pid, crxprof_method method, int *error);
 uint64_t get_process_dt(struct proc_timer *pt);
 
 #endif /* CRXPROF_PTIME_H_ */

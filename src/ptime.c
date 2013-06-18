@@ -2,8 +2,8 @@
  * ptime.h
  * get process CPU time
  */
+#include <errno.h>
 #include "ptime.h"
-
 
 static uint64_t
 get_process_time(const struct proc_timer *pt) {
@@ -16,13 +16,14 @@ get_process_time(const struct proc_timer *pt) {
 
 
 bool
-reset_process_time(struct proc_timer *pt, pid_t pid, crxprof_method method) {
+reset_process_time(struct proc_timer *pt, pid_t pid, crxprof_method method, int *error) {
     switch(method) {
         case PROF_REALTIME:
             pt->clock_id = CLOCK_MONOTONIC;
             break;
         case PROF_CPUTIME:
-            if (clock_getcpuclockid(pid, &pt->clock_id) != 0)
+            /* clock_getcpuclockid uses rc instead of `errno' */
+            if ( (*error = clock_getcpuclockid(pid, &pt->clock_id)) != 0)
                 return false;
             break;
         case PROF_IOWAIT:
@@ -31,6 +32,7 @@ reset_process_time(struct proc_timer *pt, pid_t pid, crxprof_method method) {
     }
 
     pt->prev_time = get_process_time(pt);
+    *error = errno;
     return pt->prev_time != (uint64_t)-1;
 }
 
