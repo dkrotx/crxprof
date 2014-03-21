@@ -398,7 +398,8 @@ dump_profile(const ptrace_context *pctx, calltree_node *root, const char *filena
     if (!ofile)
         err(1, "Failed to open file %s", filename);
 
-    dump_callgrind(pctx, root, ofile); 
+    dump_callgrind(pctx, root, ofile);
+    fclose(ofile);
     print_message("Profile saved to %s (Callgrind format)", filename);
 }
 
