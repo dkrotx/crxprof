@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/wait.h>
+#include <sys/syscall.h>
 #include <sys/ptrace.h>
 #include <inttypes.h>
 #include <signal.h>
@@ -168,7 +169,9 @@ main(int argc, char *argv[])
             }
 
             if (need_prof) {
-                kill(params.pid, SIGSTOP);
+                if (syscall(SYS_tkill, params.pid, SIGSTOP) == -1)
+                    warn("tkill(%d) failed", (int)params.pid);
+
                 wres = do_wait(&ptrace_ctx, true);
                 if (wres == WR_STOPPED) {
                     int signo_cont = (ptrace_ctx.stop_signal == SIGSTOP) ? 0 : ptrace_ctx.stop_signal;
