@@ -97,7 +97,7 @@ init_fndescr(pid_t pid)
 
                 for (i = 0; i < er->nsymbols; i++) {
                     const elf_symbol_t *es = &er->symbols[i];
-                    if (es->symbol_class == 'T')
+                    if (es->symbol_class == 'T' || es->symbol_class == 'W')
                         add_fndescr(es->symbol_name, es->symbol_value, es->symbol_size);
                 }
                 elfreader_close(er);
