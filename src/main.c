@@ -346,7 +346,8 @@ parse_args(program_params *params, int argc, char **argv)
             {"max-depth",     required_argument, 0,  'm' },
             {"realtime",      no_argument,       0,  'r' },
             {"threshold",     required_argument, 0,  't' },
-            {"dump",          required_argument, 0,  'd' }
+            {"dump",          required_argument, 0,  'd' },
+            {0,               0,                 0,   0  }
         };
 
         c = getopt_long(argc, argv, "m:rt:d:f:h", long_opts, NULL);
