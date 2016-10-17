@@ -36,7 +36,7 @@ get_node_cost(const calltree_node *node, uint64_t total_cost)
 typedef struct visualize_info_struct {
     const vproperties *vprops;
     uint64_t           total_cost;
-    char               prefix[512]
+    char               prefix[512];
 } visualize_info;
 
 
